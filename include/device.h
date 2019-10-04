@@ -14,11 +14,19 @@
 
 #include <boost/asio.hpp>
 #include <cstdint>
+#include <functional>
 #include <pcap.h>
 #include <string>
 
 namespace khtcp {
 namespace device {
+
+/**
+ * @brief The write handler type.
+ *
+ * (ret)
+ */
+using write_handler_t = std::function<void(int)>;
 
 const size_t CAPTURE_BUFSIZ = 8192;
 const size_t PACKET_TIMEOUT = 2;
@@ -76,14 +84,12 @@ struct device_t {
   /**
    * @brief Asynchronously inject frame into device via pcap_inject.
    *
-   * @tparam InjectHandler void(int ret)
    * @param buf The buffer to inject.
    * @param len Length of the buffer.
    * @param handler handler to call after completion.
    */
-  template <typename InjectHandler>
   void async_inject_frame(const uint8_t *buf, size_t len,
-                          InjectHandler &&handler);
+                          write_handler_t &&handler);
 
   device_t();
   ~device_t();

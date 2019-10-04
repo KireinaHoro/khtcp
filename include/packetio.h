@@ -12,6 +12,7 @@
 #ifndef __KHTCP_PACKETIO_H_
 #define __KHTCP_PACKETIO_H_
 #include <cstdint>
+#include <functional>
 #include <netinet/ether.h>
 #include <utility>
 
@@ -25,6 +26,13 @@ struct __attribute__((packed)) eth_header_t {
   uint8_t src[6];
   uint16_t ethertype;
 };
+
+/**
+ * @brief The write handler type.
+ *
+ * (ret)
+ */
+using write_handler_t = std::function<void(int)>;
 
 /**
  * @brief Construct Ethernet II frame for sending.
@@ -62,7 +70,6 @@ int send_frame(const void *buf, int len, int ethtype, const void *destmac,
  * @brief Asynchronously ncapsulate some data into an Ethernet II frame and send
  * it.
  *
- * @tparam SendHandler void(int ret)
  * @param buf Pointer to the payload.
  * @param len Length of the payload.
  * @param ethtype EtherType field value of this frame.
@@ -72,9 +79,8 @@ int send_frame(const void *buf, int len, int ethtype, const void *destmac,
  * @param handler The handler to call on after send completes.
  * @see khtcp::mgmt::add_device
  */
-template <typename SendHandler>
 void async_send_frame(const void *buf, int len, int ethtype,
-                      const void *destmac, int id, SendHandler &&handler);
+                      const void *destmac, int id, write_handler_t &&handler);
 
 /**
  * @brief Process a frame upon receiving it.

@@ -77,9 +77,8 @@ int device_t::inject_frame(const uint8_t *buf, size_t len) {
   return pcap_inject(pcap_handle, buf, len);
 }
 
-template <typename InjectHandler>
 void device_t::async_inject_frame(const uint8_t *buf, size_t len,
-                                  InjectHandler &&handler) {
+                                  write_handler_t &&handler) {
   boost::asio::post(inject_strand,
                     [&]() { handler(this->inject_frame(buf, len)); });
 }
