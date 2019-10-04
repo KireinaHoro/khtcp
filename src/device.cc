@@ -41,6 +41,8 @@ int device_t::start_capture() {
   return 0;
 }
 
+device_t::device_t() : inject_strand(core::get().io_context) {}
+
 device_t::~device_t() {
   trigger->close();
   delete trigger;
@@ -67,6 +69,19 @@ void device_t::handle_sniff() {
   } else {
     BOOST_LOG_TRIVIAL(fatal) << "Frame receive callback unset";
   }
+}
+
+int device_t::inject_frame(const uint8_t *buf, size_t len) {
+  BOOST_LOG_TRIVIAL(trace) << "Sending frame with length " << len
+                           << " on device " << name;
+  return pcap_inject(pcap_handle, buf, len);
+}
+
+template <typename InjectHandler>
+void device_t::async_inject_frame(const uint8_t *buf, size_t len,
+                                  InjectHandler &&handler) {
+  boost::asio::post(inject_strand,
+                    [&]() { handler(this->inject_frame(buf, len)); });
 }
 
 static std::vector<std::shared_ptr<device_t>> devices;

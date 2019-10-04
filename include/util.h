@@ -33,7 +33,7 @@ using colored_console_sink_t =
 void init_logging(
     boost::log::trivial::severity_level level = boost::log::trivial::info);
 
-std::string mac_to_string(uint8_t *addr, uint8_t len);
+std::string mac_to_string(const uint8_t *addr, uint8_t len);
 
 } // namespace util
 } // namespace khtcp

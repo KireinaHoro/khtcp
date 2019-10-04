@@ -13,6 +13,7 @@
 #define __KHTCP_PACKETIO_H_
 #include <cstdint>
 #include <netinet/ether.h>
+#include <utility>
 
 namespace khtcp {
 namespace eth {
@@ -24,6 +25,24 @@ struct __attribute__((packed)) eth_header_t {
   uint8_t src[6];
   uint16_t ethertype;
 };
+
+/**
+ * @brief Construct Ethernet II frame for sending.
+ *
+ * The caller has the responsibility to delete the buffer returned.
+ *
+ * @param buf Pointer to the payload.
+ * @param len Length of the payload.
+ * @param ethtype EtherType field value of this frame.
+ * @param destmac MAC address of the destination.
+ * @param id ID of the device (returned by `khtcp::mgmt::add_device`) to send
+ * on.
+ * @return std::pair<uint8_t *, size_t> the frame constructed.
+ */
+std::pair<uint8_t *, size_t> construct_frame(const void *buf, int len,
+                                             int ethtype, const void *destmac,
+                                             int id);
+
 /**
  * @brief Encapsulate some data into an Ethernet II frame and send it.
  *
@@ -38,6 +57,24 @@ struct __attribute__((packed)) eth_header_t {
  */
 int send_frame(const void *buf, int len, int ethtype, const void *destmac,
                int id);
+
+/**
+ * @brief Asynchronously ncapsulate some data into an Ethernet II frame and send
+ * it.
+ *
+ * @tparam SendHandler void(int ret)
+ * @param buf Pointer to the payload.
+ * @param len Length of the payload.
+ * @param ethtype EtherType field value of this frame.
+ * @param destmac MAC address of the destination.
+ * @param id ID of the device (returned by `khtcp::mgmt::add_device`) to send
+ * on.
+ * @param handler The handler to call on after send completes.
+ * @see khtcp::mgmt::add_device
+ */
+template <typename SendHandler>
+void async_send_frame(const void *buf, int len, int ethtype,
+                      const void *destmac, int id, SendHandler &&handler);
 
 /**
  * @brief Process a frame upon receiving it.

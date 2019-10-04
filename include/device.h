@@ -11,6 +11,7 @@
 
 #ifndef __KHTCP_DEVICE_H_
 #define __KHTCP_DEVICE_H_
+
 #include <boost/asio.hpp>
 #include <cstdint>
 #include <pcap.h>
@@ -31,8 +32,28 @@ struct device_t {
   std::string name;
   uint8_t addr[6];
   int id;
-  boost::asio::posix::stream_descriptor *trigger;
   pcap_t *pcap_handle;
+
+  /**
+   * @brief Wraps the injection operation for thread safety.
+   *
+   * We do not know if pcap_inject is thread safe, and the inject handler may be
+   * posted from different threads, so post through a strand instead of the
+   * global io_context.
+   *
+   * @see khtcp::device::device_t::handle_inject
+   */
+  boost::asio::io_context::strand inject_strand;
+
+  /**
+   * @brief The trigger fd from pcap_get_selectable_fd.
+   *
+   * A null_buffers() read will be performed; once triggered, some data are to
+   * be captured via pcap_next.
+   *
+   * @see khtcp::device::device_t::handle_sniff
+   */
+  boost::asio::posix::stream_descriptor *trigger;
 
   /**
    * @brief Register the device's capture task in the core io_context.
@@ -44,6 +65,27 @@ struct device_t {
    */
   void handle_sniff();
 
+  /**
+   * @brief Synchronously inject frame into device via pcap_inject.
+   *
+   * @param buf The buffer to inject.
+   * @param len Length of the buffer.
+   */
+  int inject_frame(const uint8_t *buf, size_t len);
+
+  /**
+   * @brief Asynchronously inject frame into device via pcap_inject.
+   *
+   * @tparam InjectHandler void(int ret)
+   * @param buf The buffer to inject.
+   * @param len Length of the buffer.
+   * @param handler handler to call after completion.
+   */
+  template <typename InjectHandler>
+  void async_inject_frame(const uint8_t *buf, size_t len,
+                          InjectHandler &&handler);
+
+  device_t();
   ~device_t();
 };
 

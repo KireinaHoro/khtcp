@@ -3,11 +3,60 @@
 #include "util.h"
 
 #include <boost/endian/conversion.hpp>
+#include <cstdlib>
 #include <iomanip>
 #include <iostream>
 
 namespace khtcp {
 namespace eth {
+
+std::pair<uint8_t *, size_t> construct_frame(const void *buf, int len,
+                                             int ethtype, const void *destmac,
+                                             int id) {
+  auto device = device::get_device_handle(id);
+  BOOST_LOG_TRIVIAL(trace) << "Constructing outgoing frame from "
+                           << util::mac_to_string((const uint8_t *)destmac, 6)
+                           << " to " << util::mac_to_string(device.addr, 6)
+                           << " with payload length " << len << ", EtherType "
+                           << ethtype << " on device " << device.name;
+
+  auto frame_len = len + sizeof(eth_header_t) + 4;
+  auto frame_buf = new uint8_t[frame_len];
+
+  auto eth_hdr = (eth_header_t *)frame_buf;
+  memcpy(eth_hdr->dst, destmac, 6);
+  memcpy(eth_hdr->src, device.addr, 6);
+  eth_hdr->ethertype = boost::endian::endian_reverse((uint16_t)ethtype);
+
+  auto payload_ptr = frame_buf + sizeof(eth_header_t);
+  memcpy(payload_ptr, buf, len);
+
+  // TODO: calculate frame checksum
+  // auto csum_ptr = payload_ptr + len;
+
+  return {frame_buf, frame_len};
+}
+
+int send_frame(const void *buf, int len, int ethtype, const void *destmac,
+               int id) {
+  auto [frame_buf, frame_len] = construct_frame(buf, len, ethtype, destmac, id);
+  auto ret = device::get_device_handle(id).inject_frame(frame_buf, frame_len);
+  delete[] frame_buf;
+  return ret;
+}
+
+template <typename SendHandler>
+void async_send_frame(const void *buf, int len, int ethtype,
+                      const void *destmac, int id, SendHandler &&handler) {
+  auto p = construct_frame(buf, len, ethtype, destmac, id);
+  auto frame_buf = p.first;
+  auto frame_len = p.second;
+  device::get_device_handle(id).async_inject_frame(frame_buf, frame_len,
+                                                   [=](int ret) {
+                                                     delete[] frame_buf;
+                                                     handler(ret);
+                                                   });
+}
 
 static frame_receive_callback _eth_callback;
 

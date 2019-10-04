@@ -54,7 +54,7 @@ void init_logging(boost::log::trivial::severity_level level) {
   boost::log::core::get()->set_filter(boost::log::trivial::severity >= level);
 }
 
-std::string mac_to_string(uint8_t *addr, uint8_t len) {
+std::string mac_to_string(const uint8_t *addr, uint8_t len) {
   std::ostringstream os;
   for (int i = 0; i < len; ++i) {
     os << std::setfill('0') << std::hex << std::setw(2) << (int)addr[i];
