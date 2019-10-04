@@ -13,11 +13,17 @@
 #include "device.h"
 #include "util.h"
 
-int main() {
+#include <iostream>
+
+int main(int argc, char **argv) {
+  if (argc != 2) {
+    std::cerr << "usage: " << argv[0] << " <interface>\n";
+    return -1;
+  }
   // khtcp::util::init_logging(boost::log::trivial::trace);
   khtcp::util::init_logging();
 
-  khtcp::device::add_device("eth0");
+  khtcp::device::add_device(argv[1]);
 
   khtcp::eth::set_frame_receive_callback(khtcp::eth::print_eth_frame_callback);
   return khtcp::core::get().run();
