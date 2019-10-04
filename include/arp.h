@@ -12,6 +12,7 @@
 #ifndef __KHTCP_ARP_H_
 #define __KHTCP_ARP_H_
 
+#include "device.h"
 #include "ip.h"
 #include "packetio.h"
 
@@ -23,9 +24,9 @@ namespace arp {
 /**
  * @brief The read handler type.
  *
- * (dev_id, opcode, sender_mac, sender_ip, target_mac, target_ip)
+ * consumed(dev_id, opcode, sender_mac, sender_ip, target_mac, target_ip)
  */
-using read_handler_t = std::function<void(int, uint16_t, eth::addr_t,
+using read_handler_t = std::function<bool(int, uint16_t, eth::addr_t,
                                           ip::addr_t, eth::addr_t, ip::addr_t)>;
 
 /**
@@ -34,6 +35,13 @@ using read_handler_t = std::function<void(int, uint16_t, eth::addr_t,
  * (dev_id, ret)
  */
 using write_handler_t = std::function<void(int, int)>;
+
+/**
+ * @brief Start ARP auto answering.
+ *
+ * @param dev_id
+ */
+void start(int dev_id);
 
 /**
  * @brief The ARP header.
@@ -72,17 +80,6 @@ void async_read_arp(int dev_id, read_handler_t &&handler);
 void async_write_arp(int dev_id, uint16_t opcode, const eth::addr_t sender_mac,
                      const ip::addr_t sender_ip, const eth::addr_t target_mac,
                      const ip::addr_t target_ip, write_handler_t &&handler);
-
-/**
- * @brief Broker for incoming ARP packets.
- *
- * This function should be called within the arp_handlers_strand for thread
- * safety when accessing the arp_handlers.
- *
- * @param dev_id
- * @param packet_ptr
- */
-void broker(int dev_id, const uint8_t *packet_ptr);
 
 } // namespace arp
 } // namespace khtcp

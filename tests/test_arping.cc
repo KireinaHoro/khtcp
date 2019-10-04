@@ -38,12 +38,19 @@ void req_once(int dev_id) {
                                      << "\n";
                          }
                        });
-  arp::async_read_arp(dev_id, [](int dev_id, uint16_t opcode,
-                                 eth::addr_t sender_mac, ip::addr_t sender_ip,
-                                 eth::addr_t target_mac, ip::addr_t target_ip) {
-    std::cout << "Unicast reply from " << util::ip_to_string(sender_ip) << " ["
-              << util::mac_to_string(sender_mac) << "]\n";
-  });
+  arp::async_read_arp(dev_id,
+                      [](int dev_id, uint16_t opcode, eth::addr_t sender_mac,
+                         ip::addr_t sender_ip, eth::addr_t target_mac,
+                         ip::addr_t target_ip) -> bool {
+                        if (opcode == 0x2) {
+                          std::cout << "Unicast reply from "
+                                    << util::ip_to_string(sender_ip) << " ["
+                                    << util::mac_to_string(sender_mac) << "]\n";
+                          return true;
+                        } else {
+                          return false;
+                        }
+                      });
 }
 
 void timer_handler(int dev_id, boost::system::error_code ec,

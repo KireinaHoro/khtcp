@@ -12,21 +12,25 @@
 #ifndef __KHTCP_DEVICE_H_
 #define __KHTCP_DEVICE_H_
 
-#include "arp.h"
-#include "ip.h"
 #include "packetio.h"
 
 #include <boost/asio.hpp>
 #include <cstdint>
 #include <functional>
+#include <list>
 #include <pcap.h>
-#include <queue>
 #include <string>
 #include <vector>
 
 namespace khtcp {
 namespace device {
 
+/**
+ * @brief The read handler type.
+ *
+ * consumed(dev_id, ethertype, payload, len)
+ */
+using read_handler_t = std::function<bool(int, uint16_t, const uint8_t *, int)>;
 /**
  * @brief The write handler type.
  *
@@ -52,13 +56,13 @@ struct device_t {
   std::vector<uint8_t *> ip_addrs;
 
   /**
-   * @brief A trampoline queue for ARP.
+   * @brief Payload handler list.
    */
-  std::queue<arp::read_handler_t> arp_handlers;
+  std::list<read_handler_t> read_handlers;
   /**
-   * @brief Strand to prevent concurrent access to the ARP queue.
+   * @brief Strand to prevent concurrent access to the payload handler list.
    */
-  boost::asio::io_context::strand arp_handlers_strand;
+  boost::asio::io_context::strand read_handlers_strand;
 
   /**
    * @brief Wraps the injection operation for thread safety.

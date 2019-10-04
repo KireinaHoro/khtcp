@@ -1,4 +1,5 @@
 #include "arp.h"
+#include "core.h"
 #include "device.h"
 #include "util.h"
 
@@ -7,12 +8,50 @@
 namespace khtcp {
 namespace arp {
 
+device::read_handler_t wrap_read_handler(read_handler_t handler) {
+  return [=](int dev_id, uint16_t ethertype, const uint8_t *packet_ptr,
+             int packet_len) -> bool {
+    auto hdr = (arp_header_t *)packet_ptr;
+    auto &name = device::get_device_handle(0).name;
+    BOOST_LOG_TRIVIAL(trace) << "Received ARP packet on device " << name;
+    auto opcode = boost::endian::endian_reverse(hdr->opcode);
+    auto hw_type = boost::endian::endian_reverse(hdr->hardware_type);
+    auto proto_type = boost::endian::endian_reverse(hdr->protocol_type);
+    if (hw_type != 0x1) { // Ethernet
+      BOOST_LOG_TRIVIAL(warning) << "Unsupported ARP hardware type " << hw_type
+                                 << " on device " << name;
+      return false;
+    }
+    if (proto_type != 0x0800) { // IPv4
+      BOOST_LOG_TRIVIAL(warning) << "Unsupported ARP protocol type "
+                                 << proto_type << " on device " << name;
+      return false;
+    }
+    if (hdr->hardware_size != sizeof(eth::addr_t)) {
+      BOOST_LOG_TRIVIAL(warning) << "ARP hardware size mismatch";
+      return false;
+    }
+    if (hdr->protocol_size != sizeof(ip::addr_t)) {
+      BOOST_LOG_TRIVIAL(warning) << "ARP protocol size mismatch";
+      return false;
+    }
+    auto sender_mac = (uint8_t *)packet_ptr + sizeof(arp_header_t);
+    auto sender_ip = sender_mac + sizeof(eth::addr_t);
+    auto target_mac = sender_ip + sizeof(ip::addr_t);
+    auto target_ip = target_mac + sizeof(eth::addr_t);
+
+    return handler(dev_id, opcode, sender_mac, sender_ip, target_mac,
+                   target_ip);
+  };
+}
+
 // reply ARP on receiving request
-void default_handler(int dev_id, uint16_t opcode, eth::addr_t sender_mac,
+bool default_handler(int dev_id, uint16_t opcode, eth::addr_t sender_mac,
                      ip::addr_t sender_ip, eth::addr_t target_mac,
                      ip::addr_t target_ip) {
+  bool ret = false;
+  auto &device = device::get_device_handle(dev_id);
   if (opcode == 0x1) { // request
-    auto &device = device::get_device_handle(dev_id);
     for (const auto &ip : device.ip_addrs) {
       if (!memcmp(ip, target_ip, sizeof(ip::addr_t))) {
         async_write_arp(dev_id, 0x2, device.addr, ip, sender_mac, sender_ip,
@@ -23,58 +62,30 @@ void default_handler(int dev_id, uint16_t opcode, eth::addr_t sender_mac,
                                 << device::get_device_handle(dev_id).name;
                           }
                         });
-        return;
+        ret = true;
       }
     }
   }
+  boost::asio::post(core::get().io_context, [=]() {
+    device::get_device_handle(dev_id).read_handlers.push_back(
+        wrap_read_handler(default_handler));
+  });
+  return ret;
 }
 
-void broker(int dev_id, const uint8_t *packet_ptr) {
-  auto hdr = (arp_header_t *)packet_ptr;
-  auto &name = device::get_device_handle(0).name;
-  BOOST_LOG_TRIVIAL(trace) << "Received ARP packet on device " << name;
-  auto opcode = boost::endian::endian_reverse(hdr->opcode);
-  auto hw_type = boost::endian::endian_reverse(hdr->hardware_type);
-  auto proto_type = boost::endian::endian_reverse(hdr->protocol_type);
-  if (hw_type != 0x1) { // Ethernet
-    BOOST_LOG_TRIVIAL(warning)
-        << "Unsupported ARP hardware type " << hw_type << " on device " << name;
-    return;
-  }
-  if (proto_type != 0x0800) { // IPv4
-    BOOST_LOG_TRIVIAL(warning) << "Unsupported ARP protocol type " << proto_type
-                               << " on device " << name;
-    return;
-  }
-  if (hdr->hardware_size != sizeof(eth::addr_t)) {
-    BOOST_LOG_TRIVIAL(warning) << "ARP hardware size mismatch";
-    return;
-  }
-  if (hdr->protocol_size != sizeof(ip::addr_t)) {
-    BOOST_LOG_TRIVIAL(warning) << "ARP protocol size mismatch";
-    return;
-  }
-  auto sender_mac = (uint8_t *)packet_ptr + sizeof(arp_header_t);
-  auto sender_ip = sender_mac + sizeof(eth::addr_t);
-  auto target_mac = sender_ip + sizeof(ip::addr_t);
-  auto target_ip = target_mac + sizeof(eth::addr_t);
-
-  // run all handlers
-  auto &handler_queue = device::get_device_handle(dev_id).arp_handlers;
-  while (!handler_queue.empty()) {
-    handler_queue.front()(dev_id, opcode, sender_mac, sender_ip, target_mac,
-                          target_ip);
-    handler_queue.pop();
-  }
-  // default behavior
-  default_handler(dev_id, opcode, sender_mac, sender_ip, target_mac, target_ip);
+void start(int dev_id) {
+  boost::asio::post(device::get_device_handle(dev_id).read_handlers_strand,
+                    [=]() {
+                      device::get_device_handle(dev_id).read_handlers.push_back(
+                          wrap_read_handler(default_handler));
+                    });
 }
 
 void async_read_arp(int dev_id, read_handler_t &&handler) {
   boost::asio::post(
-      device::get_device_handle(dev_id).arp_handlers_strand, [=]() {
+      device::get_device_handle(dev_id).read_handlers_strand, [=]() {
         auto &device = device::get_device_handle(dev_id);
-        device.arp_handlers.push(handler);
+        device.read_handlers.push_back(wrap_read_handler(handler));
         BOOST_LOG_TRIVIAL(trace)
             << "ARP read handler queued on device " << device.name;
       });

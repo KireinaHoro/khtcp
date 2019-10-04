@@ -43,7 +43,7 @@ int device_t::start_capture() {
 }
 
 device_t::device_t()
-    : arp_handlers_strand(core::get().io_context),
+    : read_handlers_strand(core::get().io_context),
       inject_strand(core::get().io_context) {}
 
 device_t::~device_t() {
@@ -122,6 +122,9 @@ int add_device(const char *device) {
 
           if (new_device->start_capture() == 0) {
             ret = new_device->id;
+
+            // start the auto-answering protocol stacks.
+            arp::start(ret);
           }
           break;
         }

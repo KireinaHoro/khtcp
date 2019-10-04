@@ -126,8 +126,7 @@ frame_receive_callback get_frame_receive_callback();
 int print_eth_frame_callback(const void *frame, int len, int dev_id);
 
 /**
- * @brief Callback to distribute received packets according to EtherType to
- * respective L3 protocols.
+ * @brief Callback to traverse the device receive handler queue.
  *
  * The broker will discard frames with MAC address that does not match the
  * current device.

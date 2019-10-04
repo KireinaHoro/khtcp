@@ -86,23 +86,23 @@ int ethertype_broker_callback(const void *frame, int len, int dev_id) {
   auto payload_ptr = (const uint8_t *)frame + sizeof(eth_header_t);
   auto payload_len = len - sizeof(eth_header_t) - 4; // checksum
   auto &device = device::get_device_handle(dev_id);
+  auto ethertype = boost::endian::endian_reverse(eth_hdr->ethertype);
   if (!memcmp(eth_hdr->dst, device.addr, sizeof(eth::addr_t)) ||
       !memcmp(eth_hdr->dst, ETH_BROADCAST, sizeof(eth::addr_t))) {
     BOOST_LOG_TRIVIAL(trace) << "Received frame for device " << device.name;
-    switch (boost::endian::endian_reverse(eth_hdr->ethertype)) {
-    case ip::ethertype:
-      // TODO: IPv4 not implemented
-      break;
-    case arp::ethertype:
-      boost::asio::post(device.arp_handlers_strand,
-                        [=]() { arp::broker(dev_id, payload_ptr); });
-      break;
-    default:
-      BOOST_LOG_TRIVIAL(debug)
-          << "Frame with type 0x" << std::setfill('0') << std::setw(4)
-          << std::hex << boost::endian::endian_reverse(eth_hdr->ethertype)
-          << " not supported on device " << device.name;
-    }
+    boost::asio::post(
+        device::get_device_handle(dev_id).read_handlers_strand, [=]() {
+          auto &device = device::get_device_handle(dev_id);
+          auto it = device.read_handlers.begin();
+          while (it != device.read_handlers.end()) {
+            if ((*it)(dev_id, ethertype, payload_ptr, payload_len)) {
+              // payload consumed
+              device.read_handlers.erase(it);
+              break;
+            }
+            ++it;
+          }
+        });
   }
   return 0;
 }
