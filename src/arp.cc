@@ -16,7 +16,7 @@ void default_handler(int dev_id, uint16_t opcode, eth::addr_t sender_mac,
     for (const auto &ip : device.ip_addrs) {
       if (!memcmp(ip, target_ip, sizeof(ip::addr_t))) {
         async_write_arp(dev_id, 0x2, device.addr, ip, sender_mac, sender_ip,
-                        [&](int dev_id, int ret) {
+                        [](int dev_id, int ret) {
                           if (ret != PCAP_ERROR) {
                             BOOST_LOG_TRIVIAL(trace)
                                 << "Sent ARP reply on device "
@@ -71,8 +71,9 @@ void broker(int dev_id, const uint8_t *packet_ptr) {
 }
 
 void async_read_arp(int dev_id, read_handler_t &&handler) {
+  boost::asio::post(
+      device::get_device_handle(dev_id).arp_handlers_strand, [=]() {
   auto &device = device::get_device_handle(dev_id);
-  boost::asio::post(device.arp_handlers_strand, [&]() {
     device.arp_handlers.push(handler);
     BOOST_LOG_TRIVIAL(trace)
         << "ARP read handler queued on device " << device.name;
@@ -103,7 +104,7 @@ void async_write_arp(int dev_id, uint16_t opcode, eth::addr_t sender_mac,
   memcpy(sip, sender_ip, sizeof(ip::addr_t));
 
   eth::async_send_frame(packet_buf, packet_len, arp::ethertype, target_mac,
-                        dev_id, [&](int ret) { handler(dev_id, ret); });
+                        dev_id, [=](int ret) { handler(dev_id, ret); });
 }
 
 } // namespace arp

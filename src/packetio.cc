@@ -15,7 +15,7 @@ namespace eth {
 std::pair<uint8_t *, size_t> construct_frame(const void *buf, int len,
                                              int ethtype, const void *destmac,
                                              int id) {
-  auto device = device::get_device_handle(id);
+  auto &device = device::get_device_handle(id);
   BOOST_LOG_TRIVIAL(trace) << "Constructing outgoing frame from "
                            << util::mac_to_string((const uint8_t *)destmac)
                            << " to " << util::mac_to_string(device.addr)
@@ -95,7 +95,7 @@ int ethertype_broker_callback(const void *frame, int len, int dev_id) {
       break;
     case arp::ethertype:
       boost::asio::post(device.arp_handlers_strand,
-                        [&]() { arp::broker(dev_id, payload_ptr); });
+                        [=]() { arp::broker(dev_id, payload_ptr); });
       break;
     default:
       BOOST_LOG_TRIVIAL(debug)

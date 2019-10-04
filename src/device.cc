@@ -87,7 +87,7 @@ int device_t::inject_frame(const uint8_t *buf, size_t len) {
 void device_t::async_inject_frame(const uint8_t *buf, size_t len,
                                   write_handler_t &&handler) {
   boost::asio::post(inject_strand,
-                    [&]() { handler(this->inject_frame(buf, len)); });
+                    [=]() { handler(this->inject_frame(buf, len)); });
 }
 
 static std::vector<std::shared_ptr<device_t>> devices;
