@@ -47,6 +47,9 @@ device_t::device_t()
       inject_strand(core::get().io_context) {}
 
 device_t::~device_t() {
+  for (auto &ip : ip_addrs) {
+    delete[] ip;
+  }
   if (trigger) {
     trigger->close();
     delete trigger;
@@ -93,38 +96,58 @@ void device_t::async_inject_frame(const uint8_t *buf, size_t len,
 static std::vector<std::shared_ptr<device_t>> devices;
 
 int add_device(const char *device) {
+  int ret = -1;
   ifaddrs *ifaddr = nullptr;
   if (getifaddrs(&ifaddr) == -1) {
     BOOST_LOG_TRIVIAL(error) << "getifaddrs failed: " << strerror(errno);
-    return -1;
+    return ret;
   } else {
     for (ifaddrs *ifa = ifaddr; ifa; ifa = ifa->ifa_next) {
-      auto s = (sockaddr_ll *)ifa->ifa_addr;
-      auto addr_s = util::mac_to_string(s->sll_addr, s->sll_halen);
-      BOOST_LOG_TRIVIAL(trace)
-          << "Found device: " << ifa->ifa_name << "(" << addr_s << ")";
+      if (!ifa->ifa_addr)
+        continue;
       if (!strcmp(ifa->ifa_name, device)) {
-        auto new_device = std::make_shared<device_t>();
-        new_device->name = std::string(ifa->ifa_name);
-        BOOST_ASSERT_MSG(s->sll_halen == 6, "Unexpected addr length");
-        memcpy(new_device->addr, s->sll_addr, sizeof(eth::addr_t));
-        new_device->id = devices.size();
-        devices.push_back(new_device);
-        BOOST_LOG_TRIVIAL(info)
+        switch (ifa->ifa_addr->sa_family) {
+        case AF_PACKET: {
+          auto s = (sockaddr_ll *)ifa->ifa_addr;
+          auto new_device = std::make_shared<device_t>();
+          new_device->name = std::string(ifa->ifa_name);
+          BOOST_ASSERT_MSG(s->sll_halen == 6, "Unexpected addr length");
+          memcpy(new_device->addr, s->sll_addr, sizeof(eth::addr_t));
+          new_device->id = devices.size();
+          devices.push_back(new_device);
+          BOOST_LOG_TRIVIAL(info)
               << "Found requested device " << ifa->ifa_name << "("
               << util::mac_to_string(new_device->addr)
-            << ") as id=" << new_device->id;
+              << ") as id=" << new_device->id;
 
-        if (new_device->start_capture() == 0) {
-          return new_device->id;
-        } else {
-          return -1;
+          if (new_device->start_capture() == 0) {
+            ret = new_device->id;
+          }
+          break;
+        }
+        case AF_INET: {
+          auto s = (sockaddr_in *)ifa->ifa_addr;
+          if (ret == -1) {
+            continue;
+          }
+          auto &device = get_device_handle(ret);
+          auto ip = new uint8_t[sizeof(ip::addr_t)];
+          memcpy(ip, &s->sin_addr.s_addr, sizeof(ip::addr_t));
+          device.ip_addrs.push_back(ip);
+          BOOST_LOG_TRIVIAL(info)
+              << "Added IP address " << util::ip_to_string(ip) << " to device "
+              << device.name;
+          break;
+        }
         }
       }
     }
   }
-  BOOST_LOG_TRIVIAL(error) << "Device " << device << " not found";
-  return -1;
+  if (ret == -1) {
+    BOOST_LOG_TRIVIAL(error) << "Device " << device << " not found";
+  }
+  freeifaddrs(ifaddr);
+  return ret;
 }
 
 int find_device(const char *device) {
