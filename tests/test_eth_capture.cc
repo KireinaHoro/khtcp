@@ -1,3 +1,14 @@
+/**
+ * @file test_eth_capture.cc
+ * @author Pengcheng Xu <jsteward@pku.edu.cn>
+ * @brief Test for basic Ethernet capture.
+ * @version 0.1
+ * @date 2019-10-05
+ *
+ * @copyright Copyright (c) 2019
+ *
+ */
+
 #include "core.h"
 #include "device.h"
 #include "util.h"

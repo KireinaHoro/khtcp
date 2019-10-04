@@ -1,3 +1,14 @@
+/**
+ * @file test_logging.cc
+ * @author Pengcheng Xu <jsteward@pku.edu.cn>
+ * @brief Test for logging facility.
+ * @version 0.1
+ * @date 2019-10-05
+ *
+ * @copyright Copyright (c) 2019
+ *
+ */
+
 #include "util.h"
 
 int main() {

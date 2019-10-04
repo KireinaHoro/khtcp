@@ -1,3 +1,14 @@
+/**
+ * @file test_arping.cc
+ * @author Pengcheng Xu <jsteward@pku.edu.cn>
+ * @brief Test for sending/receiving ARP packets.  Mimics the arping utility.
+ * @version 0.1
+ * @date 2019-10-05
+ *
+ * @copyright Copyright (c) 2019
+ *
+ */
+
 #include "arp.h"
 #include "core.h"
 #include "device.h"
