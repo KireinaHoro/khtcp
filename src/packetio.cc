@@ -1,5 +1,7 @@
 #include "packetio.h"
+#include "arp.h"
 #include "device.h"
+#include "ip.h"
 #include "util.h"
 
 #include <boost/endian/conversion.hpp>
@@ -78,6 +80,32 @@ int print_eth_frame_callback(const void *frame, int len, int dev_id) {
             << boost::endian::endian_reverse(eth_hdr->ethertype) << ", length "
             << std::dec << len << std::endl;
 
+  return 0;
+}
+
+int ethertype_broker_callback(const void *frame, int len, int dev_id) {
+  auto eth_hdr = (eth_header_t *)frame;
+  auto payload_ptr = (const uint8_t *)frame + sizeof(eth_header_t);
+  auto payload_len = len - sizeof(eth_header_t) - 4; // checksum
+  auto device = device::get_device_handle(dev_id);
+  if (!memcmp(eth_hdr->dst, device.addr, sizeof(eth::addr_t)) ||
+      !memcmp(eth_hdr->dst, ETH_BROADCAST, sizeof(eth::addr_t))) {
+    BOOST_LOG_TRIVIAL(trace) << "Received frame for device " << device.name;
+    switch (boost::endian::endian_reverse(eth_hdr->ethertype)) {
+    case ip::ethertype:
+      // TODO: IPv4 not implemented
+      break;
+    case arp::ethertype:
+      boost::asio::post(device.arp_handlers_strand,
+                        [&]() { arp::broker(dev_id, payload_ptr); });
+      break;
+    default:
+      BOOST_LOG_TRIVIAL(debug)
+          << "Frame with type 0x" << std::setfill('0') << std::setw(4)
+          << std::hex << boost::endian::endian_reverse(eth_hdr->ethertype)
+          << " not supported on device " << device.name;
+    }
+  }
   return 0;
 }
 

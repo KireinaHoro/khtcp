@@ -1,4 +1,5 @@
 #include "device.h"
+#include "arp.h"
 #include "core.h"
 #include "packetio.h"
 #include "util.h"
@@ -41,12 +42,18 @@ int device_t::start_capture() {
   return 0;
 }
 
-device_t::device_t() : inject_strand(core::get().io_context) {}
+device_t::device_t()
+    : arp_handlers_strand(core::get().io_context),
+      inject_strand(core::get().io_context) {}
 
 device_t::~device_t() {
-  trigger->close();
-  delete trigger;
-  pcap_close(pcap_handle);
+  if (trigger) {
+    trigger->close();
+    delete trigger;
+  }
+  if (pcap_handle) {
+    pcap_close(pcap_handle);
+  }
 }
 
 void device_t::handle_sniff() {
@@ -108,7 +115,6 @@ int add_device(const char *device) {
             << ") as id=" << new_device->id;
 
         if (new_device->start_capture() == 0) {
-          BOOST_LOG_TRIVIAL(info) << "Started new device";
           return new_device->id;
         } else {
           return -1;

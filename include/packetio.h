@@ -125,6 +125,20 @@ frame_receive_callback get_frame_receive_callback();
  */
 int print_eth_frame_callback(const void *frame, int len, int dev_id);
 
+/**
+ * @brief Callback to distribute received packets according to EtherType to
+ * respective L3 protocols.
+ *
+ * The broker will discard frames with MAC address that does not match the
+ * current device.
+ *
+ * @param frame pointer to frame.
+ * @param len length of the frame.
+ * @param dev_id id of device from which the frame is received from.
+ * @return int
+ */
+int ethertype_broker_callback(const void *frame, int len, int dev_id);
+
 } // namespace eth
 } // namespace khtcp
 

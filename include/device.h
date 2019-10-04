@@ -12,11 +12,17 @@
 #ifndef __KHTCP_DEVICE_H_
 #define __KHTCP_DEVICE_H_
 
+#include "arp.h"
+#include "ip.h"
+#include "packetio.h"
+
 #include <boost/asio.hpp>
 #include <cstdint>
 #include <functional>
 #include <pcap.h>
+#include <queue>
 #include <string>
+#include <vector>
 
 namespace khtcp {
 namespace device {
@@ -41,6 +47,12 @@ struct device_t {
   eth::addr_t addr;
   int id;
   pcap_t *pcap_handle;
+
+  // L3 addresses
+  std::vector<uint8_t *> ip_addrs;
+
+  std::queue<arp::read_handler_t> arp_handlers;
+  boost::asio::io_context::strand arp_handlers_strand;
 
   /**
    * @brief Wraps the injection operation for thread safety.
