@@ -11,6 +11,9 @@
 
 #ifndef __KHTCP_UTIL_H_
 #define __KHTCP_UTIL_H_
+#include "ip.h"
+#include "packetio.h"
+
 #include <boost/log/sinks/basic_sink_backend.hpp>
 #include <boost/log/sinks/sync_frontend.hpp>
 #include <boost/log/trivial.hpp>
@@ -33,7 +36,11 @@ using colored_console_sink_t =
 void init_logging(
     boost::log::trivial::severity_level level = boost::log::trivial::info);
 
-std::string mac_to_string(const uint8_t *addr, uint8_t len);
+std::string mac_to_string(const eth::addr_t addr);
+
+std::string ip_to_string(const ip::addr_t addr);
+
+int string_to_ip(const std::string &str, ip::addr_t addr);
 
 } // namespace util
 } // namespace khtcp

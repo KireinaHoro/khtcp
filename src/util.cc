@@ -1,5 +1,6 @@
 #include "util.h"
 
+#include <arpa/inet.h>
 #include <boost/log/attributes/attribute_value.hpp>
 #include <boost/log/attributes/value_extraction.hpp>
 #include <boost/log/core.hpp>
@@ -54,7 +55,8 @@ void init_logging(boost::log::trivial::severity_level level) {
   boost::log::core::get()->set_filter(boost::log::trivial::severity >= level);
 }
 
-std::string mac_to_string(const uint8_t *addr, uint8_t len) {
+std::string mac_to_string(const eth::addr_t addr) {
+  auto len = sizeof(eth::addr_t);
   std::ostringstream os;
   for (int i = 0; i < len; ++i) {
     os << std::setfill('0') << std::hex << std::setw(2) << (int)addr[i];
@@ -63,6 +65,16 @@ std::string mac_to_string(const uint8_t *addr, uint8_t len) {
     }
   }
   return os.str();
+}
+
+std::string ip_to_string(const ip::addr_t addr) {
+  in_addr in;
+  memcpy(&in.s_addr, addr, sizeof(ip::addr_t));
+  return std::string(inet_ntoa(in));
+}
+
+int string_to_ip(const std::string &str, ip::addr_t addr) {
+  return inet_aton(str.c_str(), (in_addr *)addr);
 }
 } // namespace util
 } // namespace khtcp

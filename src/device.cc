@@ -111,7 +111,8 @@ int add_device(const char *device) {
         new_device->id = devices.size();
         devices.push_back(new_device);
         BOOST_LOG_TRIVIAL(info)
-            << "Found requested device " << ifa->ifa_name << "(" << addr_s
+              << "Found requested device " << ifa->ifa_name << "("
+              << util::mac_to_string(new_device->addr)
             << ") as id=" << new_device->id;
 
         if (new_device->start_capture() == 0) {

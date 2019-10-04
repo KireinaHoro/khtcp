@@ -17,12 +17,10 @@ std::pair<uint8_t *, size_t> construct_frame(const void *buf, int len,
                                              int id) {
   auto device = device::get_device_handle(id);
   BOOST_LOG_TRIVIAL(trace) << "Constructing outgoing frame from "
-                           << util::mac_to_string((const uint8_t *)destmac,
-                                                  sizeof(eth::addr_t))
-                           << " to "
-                           << util::mac_to_string(device.addr,
-                                                  sizeof(eth::addr_t))
-                           << " with payload length " << len << ", EtherType "
+                           << util::mac_to_string((const uint8_t *)destmac)
+                           << " to " << util::mac_to_string(device.addr)
+                           << " with payload length " << len << ", EtherType 0x"
+                           << std::setw(4) << std::setfill('0') << std::hex
                            << ethtype << " on device " << device.name;
 
   auto frame_len = len + sizeof(eth_header_t) + 4;
@@ -73,8 +71,8 @@ frame_receive_callback get_frame_receive_callback() { return _eth_callback; }
 
 int print_eth_frame_callback(const void *frame, int len, int dev_id) {
   auto eth_hdr = (eth_header_t *)frame;
-  std::cout << util::mac_to_string(eth_hdr->src, sizeof(eth::addr_t)) << " > "
-            << util::mac_to_string(eth_hdr->dst, sizeof(eth::addr_t)) << " (on "
+  std::cout << util::mac_to_string(eth_hdr->src) << " > "
+            << util::mac_to_string(eth_hdr->dst) << " (on "
             << device::get_device_handle(dev_id).name << "), type 0x"
             << std::setfill('0') << std::setw(4) << std::hex
             << boost::endian::endian_reverse(eth_hdr->ethertype) << ", length "
