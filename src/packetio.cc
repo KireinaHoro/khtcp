@@ -85,7 +85,7 @@ int ethertype_broker_callback(const void *frame, int len, int dev_id) {
   auto eth_hdr = (eth_header_t *)frame;
   auto payload_ptr = (const uint8_t *)frame + sizeof(eth_header_t);
   auto payload_len = len - sizeof(eth_header_t) - 4; // checksum
-  auto device = device::get_device_handle(dev_id);
+  auto &device = device::get_device_handle(dev_id);
   if (!memcmp(eth_hdr->dst, device.addr, sizeof(eth::addr_t)) ||
       !memcmp(eth_hdr->dst, ETH_BROADCAST, sizeof(eth::addr_t))) {
     BOOST_LOG_TRIVIAL(trace) << "Received frame for device " << device.name;
