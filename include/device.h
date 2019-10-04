@@ -51,7 +51,13 @@ struct device_t {
   // L3 addresses
   std::vector<uint8_t *> ip_addrs;
 
+  /**
+   * @brief A trampoline queue for ARP.
+   */
   std::queue<arp::read_handler_t> arp_handlers;
+  /**
+   * @brief Strand to prevent concurrent access to the ARP queue.
+   */
   boost::asio::io_context::strand arp_handlers_strand;
 
   /**
