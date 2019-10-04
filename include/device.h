@@ -38,7 +38,7 @@ const size_t PACKET_TIMEOUT = 2;
  */
 struct device_t {
   std::string name;
-  uint8_t addr[6];
+  eth::addr_t addr;
   int id;
   pcap_t *pcap_handle;
 

@@ -15,8 +15,11 @@ std::pair<uint8_t *, size_t> construct_frame(const void *buf, int len,
                                              int id) {
   auto device = device::get_device_handle(id);
   BOOST_LOG_TRIVIAL(trace) << "Constructing outgoing frame from "
-                           << util::mac_to_string((const uint8_t *)destmac, 6)
-                           << " to " << util::mac_to_string(device.addr, 6)
+                           << util::mac_to_string((const uint8_t *)destmac,
+                                                  sizeof(eth::addr_t))
+                           << " to "
+                           << util::mac_to_string(device.addr,
+                                                  sizeof(eth::addr_t))
                            << " with payload length " << len << ", EtherType "
                            << ethtype << " on device " << device.name;
 
@@ -24,8 +27,8 @@ std::pair<uint8_t *, size_t> construct_frame(const void *buf, int len,
   auto frame_buf = new uint8_t[frame_len];
 
   auto eth_hdr = (eth_header_t *)frame_buf;
-  memcpy(eth_hdr->dst, destmac, 6);
-  memcpy(eth_hdr->src, device.addr, 6);
+  memcpy(eth_hdr->dst, destmac, sizeof(eth::addr_t));
+  memcpy(eth_hdr->src, device.addr, sizeof(eth::addr_t));
   eth_hdr->ethertype = boost::endian::endian_reverse((uint16_t)ethtype);
 
   auto payload_ptr = frame_buf + sizeof(eth_header_t);
@@ -68,8 +71,8 @@ frame_receive_callback get_frame_receive_callback() { return _eth_callback; }
 
 int print_eth_frame_callback(const void *frame, int len, int dev_id) {
   auto eth_hdr = (eth_header_t *)frame;
-  std::cout << util::mac_to_string(eth_hdr->src, 6) << " > "
-            << util::mac_to_string(eth_hdr->dst, 6) << " (on "
+  std::cout << util::mac_to_string(eth_hdr->src, sizeof(eth::addr_t)) << " > "
+            << util::mac_to_string(eth_hdr->dst, sizeof(eth::addr_t)) << " (on "
             << device::get_device_handle(dev_id).name << "), type 0x"
             << std::setfill('0') << std::setw(4) << std::hex
             << boost::endian::endian_reverse(eth_hdr->ethertype) << ", length "

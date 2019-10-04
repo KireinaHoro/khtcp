@@ -100,7 +100,7 @@ int add_device(const char *device) {
         auto new_device = std::make_shared<device_t>();
         new_device->name = std::string(ifa->ifa_name);
         BOOST_ASSERT_MSG(s->sll_halen == 6, "Unexpected addr length");
-        memcpy(new_device->addr, s->sll_addr, 6);
+        memcpy(new_device->addr, s->sll_addr, sizeof(eth::addr_t));
         new_device->id = devices.size();
         devices.push_back(new_device);
         BOOST_LOG_TRIVIAL(info)

@@ -18,12 +18,16 @@
 
 namespace khtcp {
 namespace eth {
+using addr_t = uint8_t[6];
+
+static const addr_t ETH_BROADCAST = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
+
 /**
  * @brief The Ethernet II header type.
  */
 struct __attribute__((packed)) eth_header_t {
-  uint8_t dst[6];
-  uint8_t src[6];
+  addr_t dst;
+  addr_t src;
   uint16_t ethertype;
 };
 
