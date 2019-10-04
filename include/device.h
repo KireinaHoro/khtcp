@@ -104,6 +104,8 @@ struct device_t {
                           write_handler_t &&handler);
 
   device_t();
+  device_t(const device_t &) = delete;
+  device_t(device_t &&) = delete;
   ~device_t();
 };
 
