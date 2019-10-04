@@ -73,27 +73,27 @@ void broker(int dev_id, const uint8_t *packet_ptr) {
 void async_read_arp(int dev_id, read_handler_t &&handler) {
   boost::asio::post(
       device::get_device_handle(dev_id).arp_handlers_strand, [=]() {
-  auto &device = device::get_device_handle(dev_id);
-    device.arp_handlers.push(handler);
-    BOOST_LOG_TRIVIAL(trace)
-        << "ARP read handler queued on device " << device.name;
-  });
+        auto &device = device::get_device_handle(dev_id);
+        device.arp_handlers.push(handler);
+        BOOST_LOG_TRIVIAL(trace)
+            << "ARP read handler queued on device " << device.name;
+      });
 }
 
-void async_write_arp(int dev_id, uint16_t opcode, eth::addr_t sender_mac,
-                     ip::addr_t sender_ip, eth::addr_t target_mac,
-                     ip::addr_t target_ip, write_handler_t &&handler) {
+void async_write_arp(int dev_id, uint16_t opcode, const eth::addr_t sender_mac,
+                     const ip::addr_t sender_ip, const eth::addr_t target_mac,
+                     const ip::addr_t target_ip, write_handler_t &&handler) {
   auto packet_len =
       sizeof(arp_header_t) + 2 * sizeof(eth::addr_t) + 2 * sizeof(ip::addr_t);
   auto packet_buf = new uint8_t[packet_len];
   auto hdr = (arp_header_t *)packet_buf;
-  hdr->hardware_type = boost::endian::endian_reverse(0x1);
-  hdr->protocol_type = boost::endian::endian_reverse(0x0800);
+  hdr->hardware_type = boost::endian::endian_reverse((uint16_t)0x1);
+  hdr->protocol_type = boost::endian::endian_reverse((uint16_t)0x0800);
   hdr->opcode = boost::endian::endian_reverse(opcode);
   hdr->hardware_size = sizeof(eth::addr_t);
   hdr->protocol_size = sizeof(ip::addr_t);
 
-  auto smac = packet_buf + sizeof(eth::addr_t);
+  auto smac = packet_buf + sizeof(arp_header_t);
   auto sip = smac + sizeof(eth::addr_t);
   auto tmac = sip + sizeof(ip::addr_t);
   auto tip = tmac + sizeof(eth::addr_t);
@@ -103,6 +103,8 @@ void async_write_arp(int dev_id, uint16_t opcode, eth::addr_t sender_mac,
   memcpy(tip, target_ip, sizeof(ip::addr_t));
   memcpy(sip, sender_ip, sizeof(ip::addr_t));
 
+  BOOST_LOG_TRIVIAL(trace) << "Sending ARP packet on device "
+                           << device::get_device_handle(dev_id).name;
   eth::async_send_frame(packet_buf, packet_len, arp::ethertype, target_mac,
                         dev_id, [=](int ret) { handler(dev_id, ret); });
 }

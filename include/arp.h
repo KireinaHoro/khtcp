@@ -69,9 +69,9 @@ void async_read_arp(int dev_id, read_handler_t &&handler);
  * @param target_ip target IP.
  * @param handler handler to call once packet has been received.
  */
-void async_write_arp(int dev_id, uint16_t opcode, eth::addr_t sender_mac,
-                     ip::addr_t sender_ip, eth::addr_t target_mac,
-                     ip::addr_t target_ip, write_handler_t &&handler);
+void async_write_arp(int dev_id, uint16_t opcode, const eth::addr_t sender_mac,
+                     const ip::addr_t sender_ip, const eth::addr_t target_mac,
+                     const ip::addr_t target_ip, write_handler_t &&handler);
 
 /**
  * @brief Broker for incoming ARP packets.
