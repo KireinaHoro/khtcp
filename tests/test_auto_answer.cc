@@ -30,7 +30,11 @@ int main(int argc, char **argv) {
     std::cerr << "usage: " << argv[0] << " <interface>\n";
     return -1;
   }
-  khtcp::util::init_logging();
+
+  if (!khtcp::core::init(true)) {
+    std::cerr << "core init failed\n";
+    return -1;
+  }
 
   khtcp::device::add_device(argv[1]);
 

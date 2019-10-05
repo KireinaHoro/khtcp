@@ -11,6 +11,8 @@
 
 #ifndef __KHTCP_PACKETIO_H_
 #define __KHTCP_PACKETIO_H_
+#include "types.h"
+
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -22,7 +24,7 @@ namespace eth {
 struct addr {
   uint8_t data[6];
 };
-using addr_t = std::shared_ptr<addr>;
+using addr_t = core::shared_ptr<addr>;
 
 static const addr _eth_broadcast = {
     .data = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff}};

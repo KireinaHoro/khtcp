@@ -12,6 +12,8 @@
 #ifndef __KHTCP_IP_H_
 #define __KHTCP_IP_H_
 
+#include "types.h"
+
 #include <cstdint>
 #include <memory>
 
@@ -21,7 +23,7 @@ namespace ip {
 struct addr {
   uint8_t data[4];
 };
-using addr_t = std::shared_ptr<addr>;
+using addr_t = core::shared_ptr<addr>;
 
 static const uint16_t ethertype = 0x0800;
 } // namespace ip

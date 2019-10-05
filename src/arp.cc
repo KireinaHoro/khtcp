@@ -58,8 +58,8 @@ bool default_handler(int dev_id, uint16_t opcode, const eth::addr *sender_mac,
   if (opcode == 0x1) { // request
     for (const auto &ip : device.ip_addrs) {
       if (!memcmp(ip->data, target_ip->data, sizeof(ip::addr))) {
-        async_write_arp(dev_id, 0x2, device.addr.get(), ip.get(), sender_mac,
-                        sender_ip, [](int dev_id, int ret) {
+        async_write_arp(dev_id, 0x2, device.addr.get().get(), ip.get().get(),
+                        sender_mac, sender_ip, [](int dev_id, int ret) {
                           if (ret != PCAP_ERROR) {
                             BOOST_LOG_TRIVIAL(trace)
                                 << "Sent ARP reply on device "
@@ -101,7 +101,7 @@ void async_write_arp(int dev_id, uint16_t opcode, const eth::addr *sender_mac,
   auto packet_len =
       sizeof(arp_header_t) + 2 * sizeof(eth::addr) + 2 * sizeof(ip::addr);
   auto packet_buf = core::get_allocator<uint8_t>().allocate(packet_len);
-  auto hdr = (arp_header_t *)packet_buf;
+  auto hdr = (arp_header_t *)packet_buf.get();
   hdr->hardware_type = boost::endian::endian_reverse((uint16_t)0x1);
   hdr->protocol_type = boost::endian::endian_reverse((uint16_t)0x0800);
   hdr->opcode = boost::endian::endian_reverse(opcode);
@@ -113,18 +113,19 @@ void async_write_arp(int dev_id, uint16_t opcode, const eth::addr *sender_mac,
   auto tmac = sip + sizeof(ip::addr);
   auto tip = tmac + sizeof(eth::addr);
 
-  memcpy(tmac, target_mac->data, sizeof(eth::addr));
-  memcpy(smac, sender_mac->data, sizeof(eth::addr));
-  memcpy(tip, target_ip->data, sizeof(ip::addr));
-  memcpy(sip, sender_ip->data, sizeof(ip::addr));
+  memcpy(tmac.get(), target_mac->data, sizeof(eth::addr));
+  memcpy(smac.get(), sender_mac->data, sizeof(eth::addr));
+  memcpy(tip.get(), target_ip->data, sizeof(ip::addr));
+  memcpy(sip.get(), sender_ip->data, sizeof(ip::addr));
 
   BOOST_LOG_TRIVIAL(trace) << "Sending ARP packet on device "
                            << device::get_device_handle(dev_id).name;
-  eth::async_send_frame(
-      packet_buf, packet_len, arp::ethertype, target_mac, dev_id, [=](int ret) {
-        handler(dev_id, ret);
-        core::get_allocator<uint8_t>().deallocate(packet_buf, packet_len);
-      });
+  eth::async_send_frame(packet_buf.get(), packet_len, arp::ethertype,
+                        target_mac, dev_id, [=](int ret) {
+                          handler(dev_id, ret);
+                          core::get_allocator<uint8_t>().deallocate(packet_buf,
+                                                                    packet_len);
+                        });
 }
 
 } // namespace arp

@@ -9,13 +9,17 @@
  *
  */
 
+#include "core.h"
 #include "device.h"
-#include "util.h"
 
 #include <iostream>
 
 int main() {
-  khtcp::util::init_logging();
+  if (!khtcp::core::init(true)) {
+    std::cerr << "core init failed\n";
+    return -1;
+  }
+
   auto id = khtcp::device::add_device("eth0");
   if (id >= 0) {
     std::cout << "Found requested device as id=" << id << std::endl;

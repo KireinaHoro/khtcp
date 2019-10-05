@@ -64,13 +64,13 @@ core::string mac_to_string(const eth::addr &addr) {
       os << ":";
     }
   }
-  return os.str();
+  return core::string(os.str().c_str(), core::get_allocator<char>());
 }
 
 core::string ip_to_string(const ip::addr &addr) {
   in_addr in;
   memcpy(&in.s_addr, addr.data, sizeof(ip::addr));
-  return core::string(inet_ntoa(in));
+  return core::string(inet_ntoa(in), core::get_allocator<char>());
 }
 
 int string_to_ip(const core::string &str, ip::addr &addr) {

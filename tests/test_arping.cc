@@ -24,20 +24,18 @@ ip::addr_t dst;
 
 void req_once(int dev_id) {
   auto &device = device::get_device_handle(dev_id);
-  arp::async_write_arp(dev_id, 0x1, device.addr.get(), device.ip_addrs[0].get(),
-                       eth::ETH_BROADCAST, dst.get(), [](int dev_id, int ret) {
-                         if (ret != PCAP_ERROR) {
-                           std::cout << "Broadcast sent for "
-                                     << util::ip_to_string(*dst)
-                                     << " on device "
-                                     << device::get_device_handle(dev_id).name
-                                     << "\n";
-                         } else {
-                           std::cerr << "Failed to send ARP packet on device "
-                                     << device::get_device_handle(dev_id).name
-                                     << "\n";
-                         }
-                       });
+  arp::async_write_arp(
+      dev_id, 0x1, device.addr.get().get(), device.ip_addrs[0].get().get(),
+      eth::ETH_BROADCAST, dst.get().get(), [](int dev_id, int ret) {
+        if (ret != PCAP_ERROR) {
+          std::cout << "Broadcast sent for " << util::ip_to_string(*dst)
+                    << " on device " << device::get_device_handle(dev_id).name
+                    << "\n";
+        } else {
+          std::cerr << "Failed to send ARP packet on device "
+                    << device::get_device_handle(dev_id).name << "\n";
+        }
+      });
   arp::async_read_arp(
       dev_id,
       [](int dev_id, uint16_t opcode, const eth::addr *sender_mac,
@@ -72,7 +70,10 @@ int main(int argc, char **argv) {
     return -1;
   }
 
-  util::init_logging(boost::log::trivial::error);
+  if (!core::init(true)) {
+    std::cerr << "core init failed\n";
+    return -1;
+  }
 
   dst = core::make_shared<ip::addr>();
 
@@ -88,7 +89,8 @@ int main(int argc, char **argv) {
     return -1;
   }
 
-  if (!util::string_to_ip(core::string(argv[2]), *dst)) {
+  if (!util::string_to_ip(core::string(argv[2], core::get_allocator<char>()),
+                          *dst)) {
     std::cerr << "Failed to parse destination IP\n";
     return -1;
   }

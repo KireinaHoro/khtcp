@@ -9,10 +9,16 @@
  *
  */
 
+#include "core.h"
 #include "util.h"
 
+#include <iostream>
+
 int main() {
-  khtcp::util::init_logging();
+  if (!khtcp::core::init(true)) {
+    std::cerr << "core init failed\n";
+    return -1;
+  }
 
   BOOST_LOG_TRIVIAL(trace) << "A trace severity message";
   BOOST_LOG_TRIVIAL(debug) << "A debug severity message";

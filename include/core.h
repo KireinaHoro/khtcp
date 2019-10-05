@@ -22,6 +22,9 @@
 namespace khtcp {
 namespace core {
 
+static const char *SHMEM_NAME = "khtcp_runtime";
+static const size_t SHMEM_SIZE = 65536;
+
 /**
  * @brief The core class stores the main io_context as well as queues for
  * communication between layers.
@@ -29,7 +32,7 @@ namespace core {
 struct core {
   boost::asio::io_context io_context;
 
-  vector<std::shared_ptr<device::device_t>> devices;
+  vector<shared_ptr<device::device_t>> devices;
 
   eth::frame_receive_callback eth_callback;
 
@@ -37,6 +40,11 @@ struct core {
    * @brief Run the core.
    */
   int run();
+
+  core();
+  core(const core &) = delete;
+  core(core &&) = delete;
+  ~core();
 };
 
 /**
@@ -47,6 +55,15 @@ struct core {
  * @return false otherwise.
  */
 bool init(bool is_server);
+
+/**
+ * @brief Get the role of the stack.
+ *
+ * @return true the current stack is a server.
+ * @return false the current stack is a client connecting to a server via shared
+ * memory.
+ */
+bool get_role();
 
 /**
  * @brief Returns the global core object reference.

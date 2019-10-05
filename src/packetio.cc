@@ -29,18 +29,18 @@ std::pair<uint8_t *, size_t> construct_frame(const void *buf, int len,
   auto frame_len = len + sizeof(eth_header_t) + 4;
   auto frame_buf = core::get_allocator<uint8_t>().allocate(frame_len);
 
-  auto eth_hdr = (eth_header_t *)frame_buf;
+  auto eth_hdr = (eth_header_t *)frame_buf.get();
   memcpy(&eth_hdr->dst, destmac, sizeof(eth::addr));
   memcpy(&eth_hdr->src, device.addr->data, sizeof(eth::addr));
   eth_hdr->ethertype = boost::endian::endian_reverse((uint16_t)ethtype);
 
   auto payload_ptr = frame_buf + sizeof(eth_header_t);
-  memcpy(payload_ptr, buf, len);
+  memcpy(payload_ptr.get(), buf, len);
 
   // TODO: calculate frame checksum
   // auto csum_ptr = payload_ptr + len;
 
-  return {frame_buf, frame_len};
+  return {frame_buf.get(), frame_len};
 }
 
 int send_frame(const void *buf, int len, int ethtype, const eth::addr *destmac,
@@ -75,9 +75,9 @@ frame_receive_callback get_frame_receive_callback() {
 
 int print_eth_frame_callback(const void *frame, int len, int dev_id) {
   auto eth_hdr = (eth_header_t *)frame;
-  std::cout << util::mac_to_string(eth_hdr->src) << " > "
-            << util::mac_to_string(eth_hdr->dst) << " (on "
-            << device::get_device_handle(dev_id).name << "), type 0x"
+  std::cout << util::mac_to_string(eth_hdr->src).c_str() << " > "
+            << util::mac_to_string(eth_hdr->dst).c_str() << " (on "
+            << device::get_device_handle(dev_id).name.c_str() << "), type 0x"
             << std::setfill('0') << std::setw(4) << std::hex
             << boost::endian::endian_reverse(eth_hdr->ethertype) << ", length "
             << std::dec << len << std::endl;
@@ -91,9 +91,11 @@ int ethertype_broker_callback(const void *frame, int len, int dev_id) {
   auto payload_len = len - sizeof(eth_header_t) - 4; // checksum
   auto &device = device::get_device_handle(dev_id);
   auto ethertype = boost::endian::endian_reverse(eth_hdr->ethertype);
-  if (!memcmp(&eth_hdr->dst, device.addr.get(), sizeof(eth::addr)) ||
+  if (!memcmp(&eth_hdr->dst, device.addr.get().get(), sizeof(eth::addr)) ||
       !memcmp(&eth_hdr->dst, ETH_BROADCAST, sizeof(eth::addr))) {
-    BOOST_LOG_TRIVIAL(trace) << "Received frame for device " << device.name;
+    BOOST_LOG_TRIVIAL(trace)
+        << "Received frame for device " << device.name << " with EtherType 0x"
+        << std::setw(4) << std::setfill('0') << std::hex << ethertype;
     boost::asio::post(
         device::get_device_handle(dev_id).read_handlers_strand, [=]() {
           auto &device = device::get_device_handle(dev_id);

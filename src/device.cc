@@ -39,7 +39,9 @@ int device_t::start_capture() {
 }
 
 device_t::device_t()
-    : addr(core::make_shared<eth::addr>()),
+    : name(core::get_allocator<char>()), addr(core::make_shared<eth::addr>()),
+      ip_addrs(core::get_allocator<ip::addr_t>()),
+      read_handlers(core::get_allocator<read_handler_t>()),
       read_handlers_strand(core::get().io_context),
       inject_strand(core::get().io_context), trigger(core::get().io_context) {}
 
@@ -98,7 +100,8 @@ int add_device(const char *device) {
         case AF_PACKET: {
           auto s = (sockaddr_ll *)ifa->ifa_addr;
           auto new_device = core::make_shared<device_t>();
-          new_device->name = core::string(ifa->ifa_name);
+          new_device->name =
+              core::string(ifa->ifa_name, core::get_allocator<char>());
           BOOST_ASSERT_MSG(s->sll_halen == 6, "Unexpected addr length");
           memcpy(new_device->addr->data, s->sll_addr, sizeof(eth::addr));
           new_device->id = core::get().devices.size();
