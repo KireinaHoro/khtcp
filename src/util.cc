@@ -55,11 +55,11 @@ void init_logging(boost::log::trivial::severity_level level) {
   boost::log::core::get()->set_filter(boost::log::trivial::severity >= level);
 }
 
-std::string mac_to_string(const eth::addr_t addr) {
-  auto len = sizeof(eth::addr_t);
+core::string mac_to_string(const eth::addr &addr) {
+  auto len = sizeof(eth::addr);
   std::ostringstream os;
   for (int i = 0; i < len; ++i) {
-    os << std::setfill('0') << std::hex << std::setw(2) << (int)addr[i];
+    os << std::setfill('0') << std::hex << std::setw(2) << (int)addr.data[i];
     if (i < len - 1) {
       os << ":";
     }
@@ -67,14 +67,14 @@ std::string mac_to_string(const eth::addr_t addr) {
   return os.str();
 }
 
-std::string ip_to_string(const ip::addr_t addr) {
+core::string ip_to_string(const ip::addr &addr) {
   in_addr in;
-  memcpy(&in.s_addr, addr, sizeof(ip::addr_t));
-  return std::string(inet_ntoa(in));
+  memcpy(&in.s_addr, addr.data, sizeof(ip::addr));
+  return core::string(inet_ntoa(in));
 }
 
-int string_to_ip(const std::string &str, ip::addr_t addr) {
-  return inet_aton(str.c_str(), (in_addr *)addr);
+int string_to_ip(const core::string &str, ip::addr &addr) {
+  return inet_aton(str.c_str(), (in_addr *)addr.data);
 }
 } // namespace util
 } // namespace khtcp

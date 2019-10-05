@@ -12,7 +12,9 @@
 #ifndef __KHTCP_DEVICE_H_
 #define __KHTCP_DEVICE_H_
 
+#include "ip.h"
 #include "packetio.h"
+#include "types.h"
 
 #include <boost/asio.hpp>
 #include <cstdint>
@@ -47,18 +49,19 @@ const size_t PACKET_TIMEOUT = 2;
  * Note that this structure assumes a 6-octet (i.e. Ethernet) address format.
  */
 struct device_t {
-  std::string name;
+  core::string name;
   eth::addr_t addr;
   int id;
+  // we do not need shared_ptr here as this will not appear on the client
   pcap_t *pcap_handle;
 
   // L3 addresses
-  std::vector<uint8_t *> ip_addrs;
+  core::vector<ip::addr_t> ip_addrs;
 
   /**
    * @brief Payload handler list.
    */
-  std::list<read_handler_t> read_handlers;
+  core::list<read_handler_t> read_handlers;
   /**
    * @brief Strand to prevent concurrent access to the payload handler list.
    */
@@ -83,7 +86,7 @@ struct device_t {
    *
    * @see khtcp::device::device_t::handle_sniff
    */
-  boost::asio::posix::stream_descriptor *trigger;
+  boost::asio::posix::stream_descriptor trigger;
 
   /**
    * @brief Register the device's capture task in the core io_context.

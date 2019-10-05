@@ -20,8 +20,6 @@ int device_t::start_capture() {
   pcap_handle = pcap_open_live(name.c_str(), CAPTURE_BUFSIZ, false,
                                PACKET_TIMEOUT, error_buffer);
   if (!pcap_handle) {
-    delete trigger;
-    trigger = nullptr;
     BOOST_LOG_TRIVIAL(error) << "Failed to open device: " << error_buffer;
     return -1;
   }
@@ -31,28 +29,21 @@ int device_t::start_capture() {
     return -1;
   }
 
-  trigger = new boost::asio::posix::stream_descriptor(
-      core::get().io_context, dup(pcap_get_selectable_fd(pcap_handle)));
+  trigger.assign(dup(pcap_get_selectable_fd(pcap_handle)));
 
   // start the task
-  trigger->async_read_some(boost::asio::null_buffers(),
-                           [this](auto ec, auto s) { this->handle_sniff(); });
+  trigger.async_read_some(boost::asio::null_buffers(),
+                          [this](auto ec, auto s) { this->handle_sniff(); });
 
   return 0;
 }
 
 device_t::device_t()
-    : read_handlers_strand(core::get().io_context),
-      inject_strand(core::get().io_context) {}
+    : addr(core::make_shared<eth::addr>()),
+      read_handlers_strand(core::get().io_context),
+      inject_strand(core::get().io_context), trigger(core::get().io_context) {}
 
 device_t::~device_t() {
-  for (auto &ip : ip_addrs) {
-    delete[] ip;
-  }
-  if (trigger) {
-    trigger->close();
-    delete trigger;
-  }
   if (pcap_handle) {
     pcap_close(pcap_handle);
   }
@@ -73,8 +64,8 @@ void device_t::handle_sniff() {
     }
 
     // recharge the task
-    trigger->async_read_some(boost::asio::null_buffers(),
-                             [this](auto ec, auto s) { this->handle_sniff(); });
+    trigger.async_read_some(boost::asio::null_buffers(),
+                            [this](auto ec, auto s) { this->handle_sniff(); });
   } else {
     BOOST_LOG_TRIVIAL(fatal) << "Frame receive callback unset";
   }
@@ -106,15 +97,15 @@ int add_device(const char *device) {
         switch (ifa->ifa_addr->sa_family) {
         case AF_PACKET: {
           auto s = (sockaddr_ll *)ifa->ifa_addr;
-          auto new_device = std::make_shared<device_t>();
-          new_device->name = std::string(ifa->ifa_name);
+          auto new_device = core::make_shared<device_t>();
+          new_device->name = core::string(ifa->ifa_name);
           BOOST_ASSERT_MSG(s->sll_halen == 6, "Unexpected addr length");
-          memcpy(new_device->addr, s->sll_addr, sizeof(eth::addr_t));
+          memcpy(new_device->addr->data, s->sll_addr, sizeof(eth::addr));
           new_device->id = core::get().devices.size();
           core::get().devices.push_back(new_device);
           BOOST_LOG_TRIVIAL(info)
               << "Found requested device " << ifa->ifa_name << "("
-              << util::mac_to_string(new_device->addr)
+              << util::mac_to_string(*new_device->addr)
               << ") as id=" << new_device->id;
 
           if (new_device->start_capture() == 0) {
@@ -131,11 +122,11 @@ int add_device(const char *device) {
             continue;
           }
           auto &device = get_device_handle(ret);
-          auto ip = new uint8_t[sizeof(ip::addr_t)];
-          memcpy(ip, &s->sin_addr.s_addr, sizeof(ip::addr_t));
+          auto ip = core::make_shared<ip::addr>();
+          memcpy(ip->data, &s->sin_addr.s_addr, sizeof(ip::addr));
           device.ip_addrs.push_back(ip);
           BOOST_LOG_TRIVIAL(info)
-              << "Added IP address " << util::ip_to_string(ip) << " to device "
+              << "Added IP address " << util::ip_to_string(*ip) << " to device "
               << device.name;
           break;
         }

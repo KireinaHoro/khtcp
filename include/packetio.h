@@ -13,21 +13,27 @@
 #define __KHTCP_PACKETIO_H_
 #include <cstdint>
 #include <functional>
+#include <memory>
 #include <netinet/ether.h>
 #include <utility>
 
 namespace khtcp {
 namespace eth {
-using addr_t = uint8_t[6];
+struct addr {
+  uint8_t data[6];
+};
+using addr_t = std::shared_ptr<addr>;
 
-static const addr_t ETH_BROADCAST = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
+static const addr _eth_broadcast = {
+    .data = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff}};
+static const addr *ETH_BROADCAST = &_eth_broadcast;
 
 /**
  * @brief The Ethernet II header type.
  */
 struct __attribute__((packed)) eth_header_t {
-  addr_t dst;
-  addr_t src;
+  addr dst;
+  addr src;
   uint16_t ethertype;
 };
 
@@ -67,7 +73,7 @@ std::pair<uint8_t *, size_t> construct_frame(const void *buf, int len,
  * @return 0 on success, -1 on error.
  * @see khtcp::mgmt::add_device
  */
-int send_frame(const void *buf, int len, int ethtype, const void *destmac,
+int send_frame(const void *buf, int len, int ethtype, const eth::addr *destmac,
                int id);
 
 /**
@@ -84,7 +90,8 @@ int send_frame(const void *buf, int len, int ethtype, const void *destmac,
  * @see khtcp::mgmt::add_device
  */
 void async_send_frame(const void *buf, int len, int ethtype,
-                      const void *destmac, int id, write_handler_t &&handler);
+                      const eth::addr *destmac, int id,
+                      write_handler_t &&handler);
 
 /**
  * @brief Process a frame upon receiving it.

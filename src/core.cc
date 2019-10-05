@@ -3,9 +3,11 @@
 
 namespace khtcp {
 namespace core {
-static core _core;
 
-core &get() { return _core; }
+core &get() {
+  static core c;
+  return c;
+}
 
 int core::run() {
   io_context.run();

@@ -13,10 +13,15 @@
 #define __KHTCP_IP_H_
 
 #include <cstdint>
+#include <memory>
 
 namespace khtcp {
 namespace ip {
-using addr_t = uint8_t[4];
+
+struct addr {
+  uint8_t data[4];
+};
+using addr_t = std::shared_ptr<addr>;
 
 static const uint16_t ethertype = 0x0800;
 } // namespace ip

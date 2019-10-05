@@ -14,11 +14,14 @@
 
 #include "device.h"
 #include "packetio.h"
+#include "types.h"
 
 #include <boost/asio.hpp>
+#include <memory>
 
 namespace khtcp {
 namespace core {
+
 /**
  * @brief The core class stores the main io_context as well as queues for
  * communication between layers.
@@ -26,7 +29,7 @@ namespace core {
 struct core {
   boost::asio::io_context io_context;
 
-  std::vector<std::shared_ptr<device::device_t>> devices;
+  vector<std::shared_ptr<device::device_t>> devices;
 
   eth::frame_receive_callback eth_callback;
 
@@ -35,6 +38,15 @@ struct core {
    */
   int run();
 };
+
+/**
+ * @brief Initialize the core object.
+ *
+ * @param is_server true if current instance is the server.
+ * @return true if core init succeeded.
+ * @return false otherwise.
+ */
+bool init(bool is_server);
 
 /**
  * @brief Returns the global core object reference.
