@@ -11,6 +11,9 @@ namespace arp {
 device::read_handler_t wrap_read_handler(read_handler_t handler) {
   return [=](int dev_id, uint16_t ethertype, const uint8_t *packet_ptr,
              int packet_len) -> bool {
+    if (ethertype != arp::ethertype) {
+      return false;
+    }
     auto hdr = (arp_header_t *)packet_ptr;
     auto &name = device::get_device_handle(0).name;
     BOOST_LOG_TRIVIAL(trace) << "Received ARP packet on device " << name;
