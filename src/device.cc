@@ -15,8 +15,6 @@ namespace khtcp {
 namespace device {
 
 int device_t::start_capture() {
-  trigger = new boost::asio::posix::stream_descriptor(core::get().io_context);
-
   char error_buffer[PCAP_ERRBUF_SIZE];
   BOOST_LOG_TRIVIAL(info) << "Opening capture on " << name;
   pcap_handle = pcap_open_live(name.c_str(), CAPTURE_BUFSIZ, false,
@@ -33,7 +31,8 @@ int device_t::start_capture() {
     return -1;
   }
 
-  trigger->assign(dup(pcap_get_selectable_fd(pcap_handle)));
+  trigger = new boost::asio::posix::stream_descriptor(
+      core::get().io_context, dup(pcap_get_selectable_fd(pcap_handle)));
 
   // start the task
   trigger->async_read_some(boost::asio::null_buffers(),
@@ -93,8 +92,6 @@ void device_t::async_inject_frame(const uint8_t *buf, size_t len,
                     [=]() { handler(this->inject_frame(buf, len)); });
 }
 
-static std::vector<std::shared_ptr<device_t>> devices;
-
 int add_device(const char *device) {
   int ret = -1;
   ifaddrs *ifaddr = nullptr;
@@ -113,8 +110,8 @@ int add_device(const char *device) {
           new_device->name = std::string(ifa->ifa_name);
           BOOST_ASSERT_MSG(s->sll_halen == 6, "Unexpected addr length");
           memcpy(new_device->addr, s->sll_addr, sizeof(eth::addr_t));
-          new_device->id = devices.size();
-          devices.push_back(new_device);
+          new_device->id = core::get().devices.size();
+          core::get().devices.push_back(new_device);
           BOOST_LOG_TRIVIAL(info)
               << "Found requested device " << ifa->ifa_name << "("
               << util::mac_to_string(new_device->addr)
@@ -154,8 +151,8 @@ int add_device(const char *device) {
 }
 
 int find_device(const char *device) {
-  for (int i = 0; i < devices.size(); ++i) {
-    if (devices[i]->name == device) {
+  for (int i = 0; i < core::get().devices.size(); ++i) {
+    if (core::get().devices[i]->name == device) {
       return i;
     }
   }
@@ -163,6 +160,6 @@ int find_device(const char *device) {
   return -1;
 }
 
-device_t &get_device_handle(int id) { return *devices.at(id); }
+device_t &get_device_handle(int id) { return *core::get().devices.at(id); }
 } // namespace device
 } // namespace khtcp

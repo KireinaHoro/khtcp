@@ -12,6 +12,9 @@
 #ifndef __KHTCP_CORE_H_
 #define __KHTCP_CORE_H_
 
+#include "device.h"
+#include "packetio.h"
+
 #include <boost/asio.hpp>
 
 namespace khtcp {
@@ -22,6 +25,10 @@ namespace core {
  */
 struct core {
   boost::asio::io_context io_context;
+
+  std::vector<std::shared_ptr<device::device_t>> devices;
+
+  eth::frame_receive_callback eth_callback;
 
   /**
    * @brief Run the core.

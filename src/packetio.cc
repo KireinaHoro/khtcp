@@ -1,5 +1,6 @@
 #include "packetio.h"
 #include "arp.h"
+#include "core.h"
 #include "device.h"
 #include "ip.h"
 #include "util.h"
@@ -60,14 +61,14 @@ void async_send_frame(const void *buf, int len, int ethtype,
                                                    });
 }
 
-static frame_receive_callback _eth_callback;
-
 int set_frame_receive_callback(frame_receive_callback callback) {
-  _eth_callback = callback;
+  core::get().eth_callback = callback;
   return 0;
 }
 
-frame_receive_callback get_frame_receive_callback() { return _eth_callback; }
+frame_receive_callback get_frame_receive_callback() {
+  return core::get().eth_callback;
+}
 
 int print_eth_frame_callback(const void *frame, int len, int dev_id) {
   auto eth_hdr = (eth_header_t *)frame;
