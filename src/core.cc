@@ -9,7 +9,7 @@ namespace khtcp {
 namespace core {
 
 static boost::interprocess::managed_shared_memory segment;
-static shared_ptr<core> _core;
+static core *_core;
 static bool role;
 
 core &get() { return *_core; }
@@ -38,8 +38,10 @@ bool init(bool is_server) {
     // mark the server as running
     segment.construct<bool>("server_running")(true);
 
-    _core = make_shared<core>();
+    _core = segment.construct<core>("server_core")();
 
+    // set default eth callback
+    eth::set_frame_receive_callback(eth::ethertype_broker_callback);
   } else {
     segment = boost::interprocess::managed_shared_memory(
         boost::interprocess::open_only, SHMEM_NAME);
@@ -49,6 +51,8 @@ bool init(bool is_server) {
       BOOST_LOG_TRIVIAL(error) << "The server is not running";
       return false;
     }
+
+    _core = segment.find<core>("server_core").first;
   }
   return segment.get_size() == SHMEM_SIZE;
 }

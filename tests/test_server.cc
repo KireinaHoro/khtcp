@@ -38,6 +38,5 @@ int main(int argc, char **argv) {
 
   khtcp::device::add_device(argv[1]);
 
-  khtcp::eth::set_frame_receive_callback(khtcp::eth::ethertype_broker_callback);
   return khtcp::core::get().run();
 }
