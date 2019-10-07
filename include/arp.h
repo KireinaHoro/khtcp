@@ -26,9 +26,9 @@ namespace arp {
  *
  * consumed(dev_id, opcode, sender_mac, sender_ip, target_mac, target_ip)
  */
-using read_handler_t =
-    std::function<bool(int, uint16_t, const eth::addr *, const ip::addr *,
-                       const eth::addr *, const ip::addr *)>;
+using read_handler_t = std::function<bool(
+    int, uint16_t, core::ptr<const eth::addr>, core::ptr<const ip::addr>,
+    core::ptr<const eth::addr>, core::ptr<const ip::addr>)>;
 
 /**
  * @brief The write handler type.
@@ -78,9 +78,12 @@ void async_read_arp(int dev_id, read_handler_t &&handler);
  * @param target_ip target IP.
  * @param handler handler to call once packet has been received.
  */
-void async_write_arp(int dev_id, uint16_t opcode, const eth::addr *sender_mac,
-                     const ip::addr *sender_ip, const eth::addr *target_mac,
-                     const ip::addr *target_ip, write_handler_t &&handler);
+void async_write_arp(int dev_id, uint16_t opcode,
+                     core::ptr<const eth::addr> sender_mac,
+                     core::ptr<const ip::addr> sender_ip,
+                     core::ptr<const eth::addr> target_mac,
+                     core::ptr<const ip::addr> target_ip,
+                     write_handler_t &&handler);
 
 } // namespace arp
 } // namespace khtcp

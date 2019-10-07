@@ -31,8 +31,8 @@ int main(int argc, char **argv) {
     return -1;
   }
 
-  if (!khtcp::core::init(true)) {
-    std::cerr << "core init failed\n";
+  if (!khtcp::core::init(false)) {
+    std::cerr << "core init for server running failed\n";
     return -1;
   }
 

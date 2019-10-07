@@ -12,6 +12,7 @@
 #ifndef __KHTCP_CORE_H_
 #define __KHTCP_CORE_H_
 
+#include "client.h"
 #include "device.h"
 #include "packetio.h"
 #include "types.h"
@@ -36,6 +37,8 @@ struct core {
 
   eth::frame_receive_callback eth_callback;
 
+  list<client_qp> client_qps;
+
   /**
    * @brief Run the core.
    */
@@ -44,26 +47,19 @@ struct core {
   core();
   core(const core &) = delete;
   core(core &&) = delete;
-  ~core();
 };
+
+extern core *_core;
 
 /**
  * @brief Initialize the core object.
  *
- * @param is_server true if current instance is the server.
+ * @param standalone true if the core runs in standalone mode (no clients
+ * accepted)
  * @return true if core init succeeded.
  * @return false otherwise.
  */
-bool init(bool is_server);
-
-/**
- * @brief Get the role of the stack.
- *
- * @return true the current stack is a server.
- * @return false the current stack is a client connecting to a server via shared
- * memory.
- */
-bool get_role();
+bool init(bool standalone = true);
 
 /**
  * @brief Returns the global core object reference.

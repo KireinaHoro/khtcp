@@ -15,7 +15,7 @@
 #include <iostream>
 
 int main() {
-  if (!khtcp::core::init(true)) {
+  if (!khtcp::core::init()) {
     std::cerr << "core init failed\n";
     return -1;
   }

@@ -9,8 +9,7 @@
  *
  */
 
-#include "arp.h"
-#include "core.h"
+#include "client/arp.h"
 #include "device.h"
 #include "util.h"
 
@@ -24,9 +23,9 @@ ip::addr_t dst;
 
 void req_once(int dev_id) {
   auto &device = device::get_device_handle(dev_id);
-  arp::async_write_arp(
-      dev_id, 0x1, device.addr.get().get(), device.ip_addrs[0].get().get(),
-      eth::ETH_BROADCAST, dst.get().get(), [](int dev_id, int ret) {
+  client::arp::async_write_arp(
+      dev_id, 0x1, device.addr.get(), device.ip_addrs[0].get(),
+      eth::get_broadcast(), dst.get(), [](int dev_id, int ret) {
         if (ret != PCAP_ERROR) {
           std::cout << "Broadcast sent for " << util::ip_to_string(*dst)
                     << " on device " << device::get_device_handle(dev_id).name
@@ -36,11 +35,12 @@ void req_once(int dev_id) {
                     << device::get_device_handle(dev_id).name << "\n";
         }
       });
-  arp::async_read_arp(
+  client::arp::async_read_arp(
       dev_id,
-      [](int dev_id, uint16_t opcode, const eth::addr *sender_mac,
-         const ip::addr *sender_ip, const eth::addr *target_mac,
-         const ip::addr *starget_ip) -> bool {
+      [](int dev_id, uint16_t opcode, core::ptr<const eth::addr> sender_mac,
+         core::ptr<const ip::addr> sender_ip,
+         core::ptr<const eth::addr> target_mac,
+         core::ptr<const ip::addr> starget_ip) -> bool {
         if (opcode == 0x2) {
           std::cout << "Unicast reply from " << util::ip_to_string(*sender_ip)
                     << " [" << util::mac_to_string(*sender_mac) << "]\n";
@@ -70,11 +70,12 @@ int main(int argc, char **argv) {
     return -1;
   }
 
-  if (!core::init(false)) {
-    std::cerr << "core init failed\n";
+  if (!client::init()) {
+    std::cerr << "client init failed\n";
     return -1;
   }
 
+  boost::asio::io_context io_context;
   dst = core::make_shared<ip::addr>();
 
   auto id = device::find_device(argv[1]);
@@ -95,9 +96,10 @@ int main(int argc, char **argv) {
             << "\n";
 
   req_once(id);
-  boost::asio::deadline_timer timer(core::get().io_context);
+  boost::asio::deadline_timer timer(io_context);
   timer.expires_from_now(boost::posix_time::seconds(1));
   timer.async_wait([&](auto ec) { timer_handler(id, ec, timer); });
 
+  io_context.run();
   return 0;
 }

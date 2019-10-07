@@ -13,6 +13,8 @@
 namespace khtcp {
 namespace eth {
 
+core::ptr<addr> &get_broadcast() { return _broadcast; }
+
 std::pair<uint8_t *, size_t> construct_frame(const void *buf, int len,
                                              int ethtype, const void *destmac,
                                              int id) {
@@ -41,14 +43,6 @@ std::pair<uint8_t *, size_t> construct_frame(const void *buf, int len,
   // auto csum_ptr = payload_ptr + len;
 
   return {frame_buf.get(), frame_len};
-}
-
-int send_frame(const void *buf, int len, int ethtype, const eth::addr *destmac,
-               int id) {
-  auto [frame_buf, frame_len] = construct_frame(buf, len, ethtype, destmac, id);
-  auto ret = device::get_device_handle(id).inject_frame(frame_buf, frame_len);
-  core::get_allocator<uint8_t>().deallocate(frame_buf, frame_len);
-  return ret;
 }
 
 void async_send_frame(const void *buf, int len, int ethtype,
@@ -92,7 +86,7 @@ int ethertype_broker_callback(const void *frame, int len, int dev_id) {
   auto &device = device::get_device_handle(dev_id);
   auto ethertype = boost::endian::endian_reverse(eth_hdr->ethertype);
   if (!memcmp(&eth_hdr->dst, device.addr.get().get(), sizeof(eth::addr)) ||
-      !memcmp(&eth_hdr->dst, ETH_BROADCAST, sizeof(eth::addr))) {
+      !memcmp(&eth_hdr->dst, get_broadcast().get(), sizeof(eth::addr))) {
     BOOST_LOG_TRIVIAL(trace)
         << "Received frame for device " << device.name << " with EtherType 0x"
         << std::setw(4) << std::setfill('0') << std::hex << ethertype;

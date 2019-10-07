@@ -26,9 +26,9 @@ struct addr {
 };
 using addr_t = core::shared_ptr<addr>;
 
-static const addr _eth_broadcast = {
-    .data = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff}};
-static const addr *ETH_BROADCAST = &_eth_broadcast;
+static core::ptr<addr> _broadcast;
+
+core::ptr<addr> &get_broadcast();
 
 /**
  * @brief The Ethernet II header type.
@@ -62,21 +62,6 @@ using write_handler_t = std::function<void(int)>;
 std::pair<uint8_t *, size_t> construct_frame(const void *buf, int len,
                                              int ethtype, const void *destmac,
                                              int id);
-
-/**
- * @brief Encapsulate some data into an Ethernet II frame and send it.
- *
- * @param buf Pointer to the payload.
- * @param len Length of the payload.
- * @param ethtype EtherType field value of this frame.
- * @param destmac MAC address of the destination.
- * @param id ID of the device (returned by `khtcp::mgmt::add_device`) to send
- * on.
- * @return 0 on success, -1 on error.
- * @see khtcp::mgmt::add_device
- */
-int send_frame(const void *buf, int len, int ethtype, const eth::addr *destmac,
-               int id);
 
 /**
  * @brief Asynchronously ncapsulate some data into an Ethernet II frame and send

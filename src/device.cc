@@ -41,7 +41,6 @@ int device_t::start_capture() {
 device_t::device_t()
     : name(core::get_allocator<char>()), addr(core::make_shared<eth::addr>()),
       ip_addrs(core::get_allocator<ip::addr_t>()),
-      read_handlers(core::get_allocator<read_handler_t>()),
       read_handlers_strand(core::get().io_context),
       inject_strand(core::get().io_context), trigger(core::get().io_context) {}
 

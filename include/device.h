@@ -61,7 +61,7 @@ struct device_t {
   /**
    * @brief Payload handler list.
    */
-  core::list<read_handler_t> read_handlers;
+  std::list<read_handler_t> read_handlers;
   /**
    * @brief Strand to prevent concurrent access to the payload handler list.
    */

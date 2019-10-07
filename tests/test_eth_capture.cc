@@ -20,7 +20,7 @@ int main(int argc, char **argv) {
     std::cerr << "usage: " << argv[0] << " <interface>\n";
     return -1;
   }
-  if (!khtcp::core::init(true)) {
+  if (!khtcp::core::init()) {
     std::cerr << "core init failed\n";
     return -1;
   }
