@@ -49,8 +49,17 @@ int send_frame(const void *buf, int len, int ethtype, const void *destmac,
   return ret;
 }
 
+void async_read_frame(int id, read_handler_t &&handler) {
+  boost::asio::post(device::get_device_handle(id).read_handlers_strand, [=]() {
+    auto &device = device::get_device_handle(id);
+    device.read_handlers.push_back(handler);
+    BOOST_LOG_TRIVIAL(trace)
+        << "Ethernet read handler queued on device " << device.name;
+  });
+}
+
 void async_write_frame(const void *buf, int len, int ethtype,
-                      const void *destmac, int id, write_handler_t &&handler) {
+                       const void *destmac, int id, write_handler_t &&handler) {
   auto p = construct_frame(buf, len, ethtype, destmac, id);
   auto frame_buf = p.first;
   auto frame_len = p.second;

@@ -32,6 +32,13 @@ struct __attribute__((packed)) eth_header_t {
 };
 
 /**
+ * @brief The read handler type.
+ *
+ * consumed(dev_id, ethertype, payload, len)
+ */
+using read_handler_t = std::function<bool(int, uint16_t, const uint8_t *, int)>;
+
+/**
  * @brief The write handler type.
  *
  * (ret)
@@ -71,20 +78,28 @@ int send_frame(const void *buf, int len, int ethtype, const void *destmac,
                int id);
 
 /**
- * @brief Asynchronously ncapsulate some data into an Ethernet II frame and send
- * it.
+ * @brief Asynchronously read an Ethernet frmae.
+ *
+ * @param id The device to operate on.
+ * @param handler handler to call when the read operation is done.
+ */
+void async_read_frame(int id, read_handler_t &&handler);
+
+/**
+ * @brief Asynchronously encapsulate some data into an Ethernet II frame and
+ * send it.
  *
  * @param buf Pointer to the payload.
  * @param len Length of the payload.
  * @param ethtype EtherType field value of this frame.
  * @param destmac MAC address of the destination.
- * @param id ID of the device (returned by `khtcp::mgmt::add_device`) to send
- * on.
+ * @param id ID of the device (returned by `khtcp::mgmt::add_device`) to
+ * send on.
  * @param handler The handler to call on after send completes.
  * @see khtcp::mgmt::add_device
  */
 void async_write_frame(const void *buf, int len, int ethtype,
-                      const void *destmac, int id, write_handler_t &&handler);
+                       const void *destmac, int id, write_handler_t &&handler);
 
 /**
  * @brief Process a frame upon receiving it.
