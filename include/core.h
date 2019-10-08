@@ -12,10 +12,15 @@
 #ifndef __KHTCP_CORE_H_
 #define __KHTCP_CORE_H_
 
+#include "client_request.h"
 #include "device.h"
 #include "packetio.h"
 
 #include <boost/asio.hpp>
+#include <memory>
+#include <unordered_map>
+
+#define SERVER_ENDPOINT "/var/run/khtcp.sock"
 
 namespace khtcp {
 namespace core {
@@ -29,6 +34,21 @@ struct core {
   std::vector<std::shared_ptr<device::device_t>> devices;
 
   eth::frame_receive_callback eth_callback;
+
+  struct deleter {
+    deleter() { ::unlink(SERVER_ENDPOINT); }
+    ~deleter() { ::unlink(SERVER_ENDPOINT); }
+  } deleter_;
+
+  boost::asio::local::stream_protocol::acceptor acceptor;
+
+  std::unordered_map<
+      int,
+      std::pair<std::unique_ptr<boost::asio::local::stream_protocol::socket>,
+                struct request>>
+      clients;
+
+  core();
 
   /**
    * @brief Run the core.
