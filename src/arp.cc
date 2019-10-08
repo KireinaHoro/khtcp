@@ -71,10 +71,10 @@ bool default_handler(int dev_id, uint16_t opcode, eth::addr_t sender_mac,
   }
   if (ret) {
     // post new handler only if when current handler will be consumed
-  boost::asio::post(core::get().io_context, [=]() {
-    device::get_device_handle(dev_id).read_handlers.push_back(
-        wrap_read_handler(default_handler));
-  });
+    boost::asio::post(core::get().io_context, [=]() {
+      device::get_device_handle(dev_id).read_handlers.push_back(
+          wrap_read_handler(default_handler));
+    });
   }
   return ret;
 }
@@ -122,8 +122,11 @@ void async_write_arp(int dev_id, uint16_t opcode, const eth::addr_t sender_mac,
 
   BOOST_LOG_TRIVIAL(trace) << "Sending ARP packet on device "
                            << device::get_device_handle(dev_id).name;
-  eth::async_send_frame(packet_buf, packet_len, arp::ethertype, target_mac,
-                        dev_id, [=](int ret) { handler(dev_id, ret); });
+  eth::async_write_frame(packet_buf, packet_len, arp::ethertype, target_mac,
+                         dev_id, [=](int ret) {
+                           handler(dev_id, ret);
+                           delete[] packet_buf;
+                         });
 }
 
 } // namespace arp

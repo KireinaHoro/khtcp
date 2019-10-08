@@ -83,7 +83,7 @@ int send_frame(const void *buf, int len, int ethtype, const void *destmac,
  * @param handler The handler to call on after send completes.
  * @see khtcp::mgmt::add_device
  */
-void async_send_frame(const void *buf, int len, int ethtype,
+void async_write_frame(const void *buf, int len, int ethtype,
                       const void *destmac, int id, write_handler_t &&handler);
 
 /**

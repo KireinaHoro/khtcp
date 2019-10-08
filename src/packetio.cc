@@ -49,7 +49,7 @@ int send_frame(const void *buf, int len, int ethtype, const void *destmac,
   return ret;
 }
 
-void async_send_frame(const void *buf, int len, int ethtype,
+void async_write_frame(const void *buf, int len, int ethtype,
                       const void *destmac, int id, write_handler_t &&handler) {
   auto p = construct_frame(buf, len, ethtype, destmac, id);
   auto frame_buf = p.first;
