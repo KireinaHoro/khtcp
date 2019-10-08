@@ -72,7 +72,7 @@ int main(int argc, char **argv) {
     return -1;
   }
 
-  util::init_logging(boost::log::trivial::error);
+  util::init_logging(boost::log::trivial::warning);
 
   int id = device::add_device(argv[1]);
   if (id == -1) {
