@@ -102,7 +102,9 @@ int add_device(const char *device) {
     for (ifaddrs *ifa = ifaddr; ifa; ifa = ifa->ifa_next) {
       if (!ifa->ifa_addr)
         continue;
-      if (!strcmp(ifa->ifa_name, device)) {
+      if ((!device && strcmp(ifa->ifa_name, "lo")) ||
+          (device && !strcmp(ifa->ifa_name, device))) {
+        // add all devices except lo if device==nullptr
         switch (ifa->ifa_addr->sa_family) {
         case AF_PACKET: {
           auto s = (sockaddr_ll *)ifa->ifa_addr;
@@ -130,7 +132,7 @@ int add_device(const char *device) {
           if (ret == -1) {
             continue;
           }
-          auto &device = get_device_handle(ret);
+          auto &device = get_device_handle(find_device(ifa->ifa_name));
           auto ip = new uint8_t[sizeof(ip::addr_t)];
           memcpy(ip, &s->sin_addr.s_addr, sizeof(ip::addr_t));
           device.ip_addrs.push_back(ip);
