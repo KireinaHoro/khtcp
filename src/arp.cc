@@ -69,10 +69,13 @@ bool default_handler(int dev_id, uint16_t opcode, eth::addr_t sender_mac,
       }
     }
   }
+  if (ret) {
+    // post new handler only if when current handler will be consumed
   boost::asio::post(core::get().io_context, [=]() {
     device::get_device_handle(dev_id).read_handlers.push_back(
         wrap_read_handler(default_handler));
   });
+  }
   return ret;
 }
 
