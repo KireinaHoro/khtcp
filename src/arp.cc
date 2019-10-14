@@ -15,7 +15,7 @@ device::read_handler_t wrap_read_handler(read_handler_t handler) {
       return false;
     }
     auto hdr = (arp_header_t *)packet_ptr;
-    auto &name = device::get_device_handle(0).name;
+    auto &name = device::get_device_handle(dev_id).name;
     BOOST_LOG_TRIVIAL(trace) << "Received ARP packet on device " << name;
     auto opcode = boost::endian::endian_reverse(hdr->opcode);
     auto hw_type = boost::endian::endian_reverse(hdr->hardware_type);
@@ -70,21 +70,15 @@ bool default_handler(int dev_id, uint16_t opcode, eth::addr_t sender_mac,
     }
   }
   if (ret) {
-    // post new handler only if when current handler will be consumed
-    boost::asio::post(core::get().io_context, [=]() {
-      device::get_device_handle(dev_id).read_handlers.push_back(
-          wrap_read_handler(default_handler));
-    });
+    async_read_arp(dev_id, default_handler);
   }
   return ret;
 }
 
 void start(int dev_id) {
-  boost::asio::post(device::get_device_handle(dev_id).read_handlers_strand,
-                    [=]() {
-                      device::get_device_handle(dev_id).read_handlers.push_back(
-                          wrap_read_handler(default_handler));
-                    });
+  async_read_arp(dev_id, default_handler);
+  // start the ARP table keeper
+
 }
 
 void async_read_arp(int dev_id, read_handler_t &&handler) {
