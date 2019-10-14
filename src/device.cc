@@ -124,6 +124,7 @@ int add_device(const char *device) {
 
             // start the auto-answering protocol stacks.
             arp::start(ret);
+            ip::start(ret);
           }
           break;
         }
@@ -132,13 +133,30 @@ int add_device(const char *device) {
           if (ret == -1) {
             continue;
           }
-          auto &device = get_device_handle(find_device(ifa->ifa_name));
+          int dev_id = find_device(ifa->ifa_name);
+          auto &device = get_device_handle(dev_id);
           auto ip = new uint8_t[sizeof(ip::addr_t)];
           memcpy(ip, &s->sin_addr.s_addr, sizeof(ip::addr_t));
           device.ip_addrs.push_back(ip);
           BOOST_LOG_TRIVIAL(info)
               << "Added IP address " << util::ip_to_string(ip) << " to device "
               << device.name;
+
+          // add route for subnet
+          ip::route r;
+          r.type = ip::route::DEV;
+          r.nexthop.dev_id = dev_id;
+          r.metric = 10; // 10 for local
+          r.prefix =
+              util::mask_to_cidr((const struct sockaddr_in *)ifa->ifa_netmask);
+          memset(r.dst, 0, sizeof(ip::addr_t));
+          memcpy(r.dst, &s->sin_addr.s_addr, r.prefix / 8);
+
+          BOOST_LOG_TRIVIAL(info)
+              << "Added device route " << util::ip_to_string(r.dst) << "/"
+              << (int)r.prefix << " dev " << device.name << " metric "
+              << r.metric;
+          ip::add_route(std::move(r));
           break;
         }
         }

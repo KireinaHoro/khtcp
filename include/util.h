@@ -18,6 +18,8 @@
 #include <boost/log/sinks/sync_frontend.hpp>
 #include <boost/log/trivial.hpp>
 #include <cstdint>
+#include <ifaddrs.h>
+#include <netpacket/packet.h>
 #include <string>
 
 namespace khtcp {
@@ -41,6 +43,8 @@ std::string mac_to_string(const eth::addr_t addr);
 std::string ip_to_string(const ip::addr_t addr);
 
 int string_to_ip(const std::string &str, ip::addr_t addr);
+
+int mask_to_cidr(const struct sockaddr_in *addr);
 
 } // namespace util
 } // namespace khtcp

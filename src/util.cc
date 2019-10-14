@@ -76,5 +76,15 @@ std::string ip_to_string(const ip::addr_t addr) {
 int string_to_ip(const std::string &str, ip::addr_t addr) {
   return inet_aton(str.c_str(), (in_addr *)addr);
 }
+
+int mask_to_cidr(const struct sockaddr_in *addr) {
+  uint32_t n = addr->sin_addr.s_addr;
+  unsigned int count = 0;
+  while (n) {
+    count += n & 1;
+    n >>= 1;
+  }
+  return count;
+}
 } // namespace util
 } // namespace khtcp

@@ -38,5 +38,9 @@ int main(int argc, char **argv) {
   khtcp::device::add_device(device);
 
   khtcp::eth::set_frame_receive_callback(khtcp::eth::ethertype_broker_callback);
+
+  std::cout << "Global Routing Table" << std::endl;
+  khtcp::ip::print_route();
+
   return khtcp::core::get().run();
 }
