@@ -15,7 +15,8 @@ void signal_handler(int sig) { get().io_context.stop(); }
 
 core::core()
     : acceptor(io_context,
-               boost::asio::local::stream_protocol::endpoint(SERVER_ENDPOINT)) {
+               boost::asio::local::stream_protocol::endpoint(SERVER_ENDPOINT)),
+      arp_table_timer(io_context) {
   std::signal(SIGTERM, signal_handler);
   std::signal(SIGINT, signal_handler);
 }

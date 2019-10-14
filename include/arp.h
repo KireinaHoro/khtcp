@@ -21,6 +21,8 @@
 
 namespace khtcp {
 namespace arp {
+const int NEIGHBOR_TIMEOUT = 20;
+
 /**
  * @brief The read handler type.
  *
@@ -35,6 +37,16 @@ using read_handler_t = std::function<bool(int, uint16_t, eth::addr_t,
  * (dev_id, ret)
  */
 using write_handler_t = std::function<void(int, int)>;
+
+/**
+ * @brief The resolve MAC handler type.
+ *
+ * (ret, MAC)
+ *
+ * When a resolution fails (perhaps due to an unanswered ARP), ret
+ * will carry the errno.
+ */
+using resolve_mac_handler_t = std::function<void(int, const eth::addr_t)>;
 
 /**
  * @brief Start ARP auto answering.
@@ -80,6 +92,19 @@ void async_read_arp(int dev_id, read_handler_t &&handler);
 void async_write_arp(int dev_id, uint16_t opcode, const eth::addr_t sender_mac,
                      const ip::addr_t sender_ip, const eth::addr_t target_mac,
                      const ip::addr_t target_ip, write_handler_t &&handler);
+
+/**
+ * @brief Asynchronously resolve MAC address for given IP destination.
+ *
+ * Note that if the MAC has already been resolved and has not expired, this
+ * function will call the handler synchronously.
+ *
+ * @param dev_id device ID to send resolving ARP on.
+ * @param dst destination IP.
+ * @param handler handler to call when MAC resolving is done.
+ */
+void async_resolve_mac(int dev_id, const ip::addr_t dst,
+                       resolve_mac_handler_t &&handler);
 
 } // namespace arp
 } // namespace khtcp

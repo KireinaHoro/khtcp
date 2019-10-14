@@ -8,6 +8,12 @@
 namespace khtcp {
 namespace arp {
 
+struct eth_holder {
+  eth::addr_t data;
+};
+// IP -> <MAC, timeout>
+std::map<uint32_t, std::pair<eth_holder, int>> neighbor_map;
+
 device::read_handler_t wrap_read_handler(read_handler_t handler) {
   return [=](int dev_id, uint16_t ethertype, const uint8_t *packet_ptr,
              int packet_len) -> bool {
@@ -43,6 +49,15 @@ device::read_handler_t wrap_read_handler(read_handler_t handler) {
     auto target_mac = sender_ip + sizeof(ip::addr_t);
     auto target_ip = target_mac + sizeof(eth::addr_t);
 
+    // record mapping in global ARP table
+    BOOST_LOG_TRIVIAL(trace)
+        << "Recording neighbor " << util::ip_to_string(sender_ip)
+        << " with MAC " << util::mac_to_string(sender_mac) << " and timeout "
+        << NEIGHBOR_TIMEOUT;
+    memcpy(&neighbor_map[*((uint32_t *)sender_ip)].first.data, sender_mac,
+           sizeof(eth::addr_t));
+    neighbor_map[*((uint32_t *)sender_ip)].second = NEIGHBOR_TIMEOUT;
+
     return handler(dev_id, opcode, sender_mac, sender_ip, target_mac,
                    target_ip);
   };
@@ -75,10 +90,34 @@ bool default_handler(int dev_id, uint16_t opcode, eth::addr_t sender_mac,
   return ret;
 }
 
+// runs per second.  decreases entry's ttl and purges aging ones.
+void scan_arp_table() {
+  int counter = 0;
+  auto it = neighbor_map.begin();
+  while (it != neighbor_map.end()) {
+    if (it->second.second == 0) {
+      neighbor_map.erase(it++);
+      ++counter;
+    } else {
+      --(it++)->second.second;
+    }
+  }
+  BOOST_LOG_TRIVIAL(trace) << "Purged " << counter
+                           << " entries during ARP table cleanup";
+
+  // fire a new round
+  auto &timer = core::get().arp_table_timer;
+  timer.expires_from_now(boost::posix_time::seconds(1));
+  timer.async_wait([&](auto ec) { scan_arp_table(); });
+}
+
 void start(int dev_id) {
   async_read_arp(dev_id, default_handler);
   // start the ARP table keeper
 
+  auto &timer = core::get().arp_table_timer;
+  timer.expires_from_now(boost::posix_time::seconds(1));
+  timer.async_wait([&](auto ec) { scan_arp_table(); });
 }
 
 void async_read_arp(int dev_id, read_handler_t &&handler) {
@@ -121,6 +160,47 @@ void async_write_arp(int dev_id, uint16_t opcode, const eth::addr_t sender_mac,
                            handler(dev_id, ret);
                            delete[] packet_buf;
                          });
+}
+
+void async_resolve_mac(int dev_id, const ip::addr_t dst,
+                       resolve_mac_handler_t &&handler) {
+  auto key = *((uint32_t *)dst);
+  auto t = new boost::asio::deadline_timer(core::get().io_context);
+  static std::function<void(int)> check_mac = [=](int n) {
+    if (neighbor_map.find(key) == neighbor_map.end()) {
+      // send ARP query.
+      auto &device = device::get_device_handle(dev_id);
+      async_write_arp(
+          dev_id, 0x1, device.addr, device.ip_addrs[0], eth::ETH_BROADCAST, dst,
+          [=](int dev_id, int ret) {
+            if (ret != PCAP_ERROR) {
+              if (n < 50) {
+                t->expires_from_now(boost::posix_time::milliseconds(20));
+                t->async_wait([=](auto ec) {
+                  if (!ec) {
+                    check_mac(n + 1);
+                  } else {
+                    BOOST_LOG_TRIVIAL(warning)
+                        << "Resolve MAC timer failed: " << ec.message();
+                    delete t;
+                  }
+                });
+              } else {
+                handler(EHOSTUNREACH, nullptr);
+                delete t;
+              }
+            } else {
+              BOOST_LOG_TRIVIAL(error) << "Failed to do ARP resolution";
+            }
+          });
+    } else {
+      BOOST_LOG_TRIVIAL(trace)
+          << "ARP table hit for IP " << util::ip_to_string(dst);
+      handler(0, neighbor_map[key].first.data);
+      delete t;
+    }
+  };
+  check_mac(0);
 }
 
 } // namespace arp

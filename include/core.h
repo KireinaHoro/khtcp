@@ -48,6 +48,8 @@ struct core {
                 struct request>>
       clients;
 
+  boost::asio::deadline_timer arp_table_timer;
+
   core();
 
   /**
