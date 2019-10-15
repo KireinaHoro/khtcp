@@ -10,7 +10,8 @@
 
 namespace khtcp {
 namespace ip {
-device::read_handler_t wrap_read_handler(int proto, read_handler_t handler) {
+device::read_handler_t wrap_read_handler(int16_t proto,
+                                         read_handler_t handler) {
   return [=](int dev_id, uint16_t ethertype, const uint8_t *packet_ptr,
              int packet_len) -> bool {
     if (ethertype != ip::ethertype) {
@@ -22,7 +23,8 @@ device::read_handler_t wrap_read_handler(int proto, read_handler_t handler) {
     BOOST_LOG_TRIVIAL(trace) << "Received IP packet on device " << name
                              << " with proto " << (int)hdr_ptr->proto;
     if (proto < 0 || hdr_ptr->proto == proto) {
-      auto hdr_len = hdr_ptr->ihl * sizeof(uint32_t);
+      uint16_t hdr_len = hdr_ptr->ihl * sizeof(uint32_t);
+      BOOST_ASSERT(hdr_len == 20);
       auto option_ptr = ((const uint8_t *)packet_ptr) + sizeof(ip_header_t);
       auto payload_ptr = ((const uint8_t *)packet_ptr) + hdr_len;
       auto payload_len =
@@ -174,6 +176,7 @@ void async_write_ip(int dev_id, const addr_t src, const addr_t dst,
           << "Failed to resolve MAC for " << util::ip_to_string(dst)
           << ": Errno " << ret;
       handler(dev_id, ret);
+      delete[] packet_ptr;
     } else {
       eth::async_write_frame(packet_ptr, packet_len, ip::ethertype, addr,
                              dev_id, [=](int ret) {

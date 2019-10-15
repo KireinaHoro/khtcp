@@ -77,7 +77,7 @@ static const uint16_t ethertype = 0x0800;
  * @param handler handler to wrap
  * @return device::read_handler_t
  */
-device::read_handler_t wrap_read_handler(int proto, read_handler_t handler);
+device::read_handler_t wrap_read_handler(int16_t proto, read_handler_t handler);
 
 /**
  * @brief Asynchronously read an IP packet.
