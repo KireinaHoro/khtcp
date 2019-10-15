@@ -71,11 +71,9 @@ struct request {
     } arp_write;
 
     struct {
-      int dev_id;
       uint8_t proto;
     } ip_read;
     struct {
-      int dev_id;
       struct sockaddr_in src;
       struct sockaddr_in dst;
       uint8_t proto;
@@ -121,13 +119,11 @@ struct response {
     } arp_write;
 
     struct {
-      int dev_id;
       struct sockaddr_in src;
       struct sockaddr_in dst;
       uint8_t dscp;
     } ip_read;
     struct {
-      int dev_id;
       int ret;
     } ip_write;
   };

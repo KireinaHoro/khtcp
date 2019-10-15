@@ -11,6 +11,7 @@
 
 #ifndef __KHTCP_UTIL_H_
 #define __KHTCP_UTIL_H_
+#include "device.h"
 #include "ip.h"
 #include "packetio.h"
 

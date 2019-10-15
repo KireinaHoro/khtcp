@@ -12,8 +12,6 @@
 #ifndef __KHTCP_IP_H_
 #define __KHTCP_IP_H_
 
-#include "device.h"
-
 #include <cstdint>
 #include <functional>
 #include <string>
@@ -47,20 +45,19 @@ struct __attribute__((packed)) ip_header_t {
 /**
  * @brief The read handler type.
  *
- * consumed(dev_id, payload_ptr, payload_len, src, dst, dscp, opt)
+ * consumed(payload_ptr, payload_len, src, dst, dscp, opt)
  *
  * As recommended in https://tools.ietf.org/html/rfc791#section-3.3
  */
-using read_handler_t =
-    std::function<bool(int, const void *, uint64_t, const addr_t, const addr_t,
-                       uint8_t, const void *)>;
+using read_handler_t = std::function<bool(const void *, uint64_t, const addr_t,
+                                          const addr_t, uint8_t, const void *)>;
 
 /**
  * @brief The write handler type.
  *
- * (dev_id, ret)
+ * (ret)
  */
-using write_handler_t = std::function<void(int, int)>;
+using write_handler_t = std::function<void(int)>;
 
 // The header shall be of just 5*4=20 octets
 static_assert(sizeof(ip_header_t) == 5 * 4, "IP header size mismatch");
@@ -72,18 +69,16 @@ static const uint16_t ethertype = 0x0800;
  *
  * As recommended in https://tools.ietf.org/html/rfc791#section-3.3
  *
- * @param dev_id device id to receive IP packet from.
  * @param proto protocol code
  * @param handler handler to call once packet has been received.
  */
-void async_read_ip(int dev_id, int proto, read_handler_t &&handler);
+void async_read_ip(int proto, read_handler_t &&handler);
 
 /**
  * @brief Asynchronously write an IP packet.
  *
  * As recommended in https://tools.ietf.org/html/rfc791#section-3.3
  *
- * @param dev_id device to write to
  * @param src source IP address
  * @param dst destination IP address
  * @param proto protocol code
@@ -96,18 +91,17 @@ void async_read_ip(int dev_id, int proto, read_handler_t &&handler);
  * @param df DF flag, default = true
  * @param option Option pointer, default = nullptr
  */
-void async_write_ip(int dev_id, const addr_t src, const addr_t dst,
-                    uint8_t proto, uint8_t dscp, uint8_t ttl,
-                    const void *payload_ptr, uint64_t payload_len,
-                    write_handler_t &&handler, uint16_t identification = 0,
-                    bool df = true, const void *option = nullptr);
+void async_write_ip(const addr_t src, const addr_t dst, uint8_t proto,
+                    uint8_t dscp, uint8_t ttl, const void *payload_ptr,
+                    uint64_t payload_len, write_handler_t &&handler,
+                    uint16_t identification = 0, bool df = true,
+                    const void *option = nullptr);
 
 /**
  * @brief Start IP auto answering.
  *
- * @param dev_id
  */
-void start(int dev_id);
+void start();
 
 /**
  * @brief An entry in the routing table.  Resembles the Linux routing table

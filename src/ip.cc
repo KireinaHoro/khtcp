@@ -10,18 +10,24 @@
 
 namespace khtcp {
 namespace ip {
-device::read_handler_t wrap_read_handler(int dev_id_, int16_t proto,
+device::read_handler_t wrap_read_handler(int16_t proto,
                                          read_handler_t handler) {
   return [=](int dev_id, uint16_t ethertype, const uint8_t *packet_ptr,
              int packet_len) -> bool {
-    if (dev_id_ != dev_id || ethertype != ip::ethertype) {
+    if (ethertype != ip::ethertype) {
       return false;
     }
     auto hdr_ptr = (const ip_header_t *)packet_ptr;
 
-    auto &name = device::get_device_handle(dev_id).name;
-    BOOST_LOG_TRIVIAL(trace) << "Received IP packet on device " << name
+    auto &device = device::get_device_handle(dev_id);
+    BOOST_LOG_TRIVIAL(trace) << "Received IP packet on device " << device.name
                              << " with proto " << (int)hdr_ptr->proto;
+    auto unicast = false;
+    auto self_sent = false;
+    for (const auto &ip : device.ip_addrs) {
+      unicast = !memcmp(ip, hdr_ptr->dst_addr, sizeof(addr_t));
+      self_sent = !memcmp(ip, hdr_ptr->src_addr, sizeof(addr_t));
+    }
     if (proto < 0 || hdr_ptr->proto == proto) {
       uint16_t hdr_len = hdr_ptr->ihl * sizeof(uint32_t);
       BOOST_ASSERT(hdr_len == 20);
@@ -29,8 +35,26 @@ device::read_handler_t wrap_read_handler(int dev_id_, int16_t proto,
       auto payload_ptr = ((const uint8_t *)packet_ptr) + hdr_len;
       auto payload_len =
           boost::endian::endian_reverse(hdr_ptr->total_length) - hdr_len;
-      return handler(dev_id, payload_ptr, payload_len, hdr_ptr->src_addr,
-                     hdr_ptr->dst_addr, hdr_ptr->dscp, option_ptr);
+      if (unicast) {
+        return handler(payload_ptr, payload_len, hdr_ptr->src_addr,
+                       hdr_ptr->dst_addr, hdr_ptr->dscp, option_ptr);
+      } else if (self_sent) {
+        // ignore packets sent by self, keeping the handler intact
+        return false;
+      } else {
+        // forward the packet, keeping the handler intact
+        async_write_ip(hdr_ptr->src_addr, hdr_ptr->dst_addr, hdr_ptr->proto,
+                       hdr_ptr->dscp, hdr_ptr->ttl, payload_ptr, payload_len,
+                       [](auto ret) {
+                         if (!ret) {
+                           BOOST_LOG_TRIVIAL(trace) << "IP packet forwarded.";
+                         } else {
+                           BOOST_LOG_TRIVIAL(error)
+                               << "IP packet forwarding failed: Errno " << ret;
+                         }
+                       });
+        return false;
+      }
     } else {
       return false;
     }
@@ -38,28 +62,25 @@ device::read_handler_t wrap_read_handler(int dev_id_, int16_t proto,
 }
 
 // Used to print debug information for all packets.
-bool default_handler(int dev_id, const void *payload_ptr, uint64_t payload_len,
+bool default_handler(const void *payload_ptr, uint64_t payload_len,
                      const addr_t src, const addr_t dst, uint8_t dscp,
                      const void *opt) {
   auto ret = false;
-  auto &device = device::get_device_handle(dev_id);
   BOOST_LOG_TRIVIAL(trace) << "IP packet from " << util::ip_to_string(src)
                            << " to " << util::ip_to_string(dst)
                            << " with payload length " << payload_len;
   if (ret) {
-    async_read_ip(dev_id, -1, default_handler);
+    async_read_ip(-1, default_handler);
   }
   return ret;
 }
 
-void start(int dev_id) { async_read_ip(dev_id, -1, default_handler); }
+void start() { async_read_ip(-1, default_handler); }
 
-void async_read_ip(int dev_id, int proto, read_handler_t &&handler) {
+void async_read_ip(int proto, read_handler_t &&handler) {
   boost::asio::post(core::get().read_handlers_strand, [=]() {
-    core::get().read_handlers.push_back(
-        wrap_read_handler(dev_id, proto, handler));
-    BOOST_LOG_TRIVIAL(trace) << "IP read handler queued for device "
-                             << device::get_device_handle(dev_id).name;
+    core::get().read_handlers.push_back(wrap_read_handler(proto, handler));
+    BOOST_LOG_TRIVIAL(trace) << "IP read handler queued";
   });
 }
 
@@ -116,18 +137,16 @@ uint16_t ip_checksum(const void *vdata, size_t length) {
   return htons(~acc);
 }
 
-void async_write_ip(int dev_id, const addr_t src, const addr_t dst,
-                    uint8_t proto, uint8_t dscp, uint8_t ttl,
-                    const void *payload_ptr, uint64_t payload_len,
-                    write_handler_t &&handler, uint16_t identification, bool df,
-                    const void *option) {
-  BOOST_LOG_TRIVIAL(trace) << "Sending IP packet on device "
-                           << device::get_device_handle(dev_id).name
-                           << " with payload length " << payload_len;
+void async_write_ip(const addr_t src, const addr_t dst, uint8_t proto,
+                    uint8_t dscp, uint8_t ttl, const void *payload_ptr,
+                    uint64_t payload_len, write_handler_t &&handler,
+                    uint16_t identification, bool df, const void *option) {
+  BOOST_LOG_TRIVIAL(trace) << "Sending IP packet with payload length "
+                           << payload_len;
 
   if (option) {
     BOOST_LOG_TRIVIAL(error) << "Requested to send non-null option IP packet";
-    handler(dev_id, -1);
+    handler(-1);
     return;
   }
 
@@ -137,15 +156,29 @@ void async_write_ip(int dev_id, const addr_t src, const addr_t dst,
     // failed to get route for destination
     BOOST_LOG_TRIVIAL(warning)
         << "No route to host " << util::ip_to_string(dst);
-    handler(dev_id, EHOSTUNREACH);
+    handler(EHOSTUNREACH);
+    return;
+  }
+  if (route->type != route::DEV && route->type != route::VIA) {
+    BOOST_LOG_TRIVIAL(error) << "Unknown route type " << route->type;
+    handler(EINVAL);
     return;
   }
 
-  if (route->type != route::DEV && route->type != route::VIA) {
-    BOOST_LOG_TRIVIAL(error) << "Unknown route type " << route->type;
-    handler(dev_id, EINVAL);
-    return;
+  const uint8_t *resolv_mac_ip = dst;
+  while (route->type != route::DEV) {
+    // lookup gateway address in routing table
+    resolv_mac_ip = route->nexthop.ip;
+    got_route = lookup_route(resolv_mac_ip, &route);
+    if (!got_route) {
+      BOOST_LOG_TRIVIAL(warning)
+          << "No route to host " << util::ip_to_string(resolv_mac_ip);
+      handler(EHOSTUNREACH);
+      return;
+    }
   }
+  // we have a DEV route now
+  auto dev_id = route->nexthop.dev_id;
 
   auto packet_len = sizeof(ip_header_t) + payload_len;
   auto packet_ptr = new uint8_t[packet_len];
@@ -174,23 +207,21 @@ void async_write_ip(int dev_id, const addr_t src, const addr_t dst,
       BOOST_LOG_TRIVIAL(warning)
           << "Failed to resolve MAC for " << util::ip_to_string(dst)
           << ": Errno " << ret;
-      handler(dev_id, ret);
+      handler(ret);
       delete[] packet_ptr;
     } else {
-      eth::async_write_frame(packet_ptr, packet_len, ip::ethertype, addr,
-                             dev_id, [=](int ret) {
-                               handler(dev_id, ret);
-                               delete[] packet_ptr;
-                             });
+      eth::async_write_frame(
+          packet_ptr, packet_len, ip::ethertype, addr, dev_id, [=](int ret) {
+            if (ret) {
+              BOOST_LOG_TRIVIAL(error)
+                  << "Failed to write IP packet: Errno " << ret;
+            }
+            handler(ret);
+            delete[] packet_ptr;
+          });
     }
   };
-  if (route->type == route::DEV) {
-    // resolve MAC for destination
-    arp::async_resolve_mac(dev_id, dst, mac_handler);
-  } else {
-    // resolve MAC for gateway
-    arp::async_resolve_mac(dev_id, route->nexthop.ip, mac_handler);
-  }
+  arp::async_resolve_mac(dev_id, resolv_mac_ip, mac_handler);
 }
 
 bool route::operator<(const struct route &a) const {

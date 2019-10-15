@@ -170,13 +170,12 @@ void client_request_handler(const boost::system::error_code &ec,
       break;
     case IP_READ:
       ip::async_read_ip(
-          req.ip_read.dev_id, req.ip_read.proto,
-          [buf, resp, &sock](int dev_id, const void *payload_ptr,
-                             uint64_t payload_len, const khtcp::ip::addr_t src,
+          req.ip_read.proto,
+          [buf, resp, &sock](const void *payload_ptr, uint64_t payload_len,
+                             const khtcp::ip::addr_t src,
                              const khtcp::ip::addr_t dst, uint8_t dscp,
                              const void *opt) -> bool {
             resp->payload_len = payload_len;
-            resp->ip_read.dev_id = dev_id;
             resp->ip_read.dscp = dscp;
             memcpy(&resp->ip_read.dst.sin_addr, dst, 4);
             resp->ip_read.dst.sin_family = AF_INET;
@@ -204,12 +203,11 @@ void client_request_handler(const boost::system::error_code &ec,
       boost::asio::read(sock,
                         boost::asio::buffer(payload_ptr, req.payload_len));
       ip::async_write_ip(
-          req.ip_write.dev_id, (uint8_t *)&req.ip_write.src.sin_addr,
+          (uint8_t *)&req.ip_write.src.sin_addr,
           (uint8_t *)&req.ip_write.dst.sin_addr, req.ip_write.proto,
           req.ip_write.dscp, req.ip_write.ttl, payload_ptr, req.payload_len,
-          [buf, resp, payload_ptr, &sock](int dev_id, int ret) {
+          [buf, resp, payload_ptr, &sock](int ret) {
             resp->payload_len = 0;
-            resp->ip_write.dev_id = dev_id;
             resp->ip_write.ret = ret;
 
             try {
@@ -273,6 +271,7 @@ void new_client_handler(const boost::system::error_code &ec,
 int core::run() {
   srand((unsigned)time(nullptr));
   acceptor.async_accept(new_client_handler);
+  ip::start();
 
   io_context.run();
   // should never reach here

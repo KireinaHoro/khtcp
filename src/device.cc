@@ -121,9 +121,8 @@ int add_device(const char *device) {
           if (new_device->start_capture() == 0) {
             ret = new_device->id;
 
-            // start the auto-answering protocol stacks.
+            // start the per-device auto-answering protocol stacks.
             arp::start(ret);
-            ip::start(ret);
           }
           break;
         }
