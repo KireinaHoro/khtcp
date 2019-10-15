@@ -33,7 +33,7 @@ int main(int argc, char **argv) {
   } else if (argc == 2) {
     device = argv[1];
   }
-  khtcp::util::init_logging(boost::log::trivial::info);
+  khtcp::util::init_logging(boost::log::trivial::warning);
 
   khtcp::device::add_device(device);
 
