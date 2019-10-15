@@ -50,11 +50,18 @@ int send_frame(const void *buf, int len, int ethtype, const void *destmac,
 }
 
 void async_read_frame(int id, read_handler_t &&handler) {
-  boost::asio::post(device::get_device_handle(id).read_handlers_strand, [=]() {
-    auto &device = device::get_device_handle(id);
-    device.read_handlers.push_back(handler);
-    BOOST_LOG_TRIVIAL(trace)
-        << "Ethernet read handler queued on device " << device.name;
+  boost::asio::post(core::get().read_handlers_strand, [=]() {
+    core::get().read_handlers.push_back(
+        [id, handler](int dev_id, uint16_t ethertype, const uint8_t *payload,
+                      int len) -> bool {
+          if (id != dev_id) {
+            return false;
+          } else {
+            return handler(dev_id, ethertype, payload, len);
+          }
+        });
+    BOOST_LOG_TRIVIAL(trace) << "Ethernet read handler queued for device "
+                             << device::get_device_handle(id).name;
   });
 }
 
@@ -100,19 +107,17 @@ int ethertype_broker_callback(const void *frame, int len, int dev_id) {
   if (!memcmp(eth_hdr->dst, device.addr, sizeof(eth::addr_t)) ||
       !memcmp(eth_hdr->dst, ETH_BROADCAST, sizeof(eth::addr_t))) {
     BOOST_LOG_TRIVIAL(trace) << "Received frame for device " << device.name;
-    boost::asio::post(
-        device::get_device_handle(dev_id).read_handlers_strand, [=]() {
-          auto &device = device::get_device_handle(dev_id);
-          auto it = device.read_handlers.begin();
-          while (it != device.read_handlers.end()) {
-            if ((*it)(dev_id, ethertype, payload_ptr, payload_len)) {
-              // payload consumed
-              device.read_handlers.erase(it);
-              break;
-            }
-            ++it;
-          }
-        });
+    boost::asio::post(core::get().read_handlers_strand, [=]() {
+      auto it = core::get().read_handlers.begin();
+      while (it != core::get().read_handlers.end()) {
+        if ((*it)(dev_id, ethertype, payload_ptr, payload_len)) {
+          // payload consumed
+          core::get().read_handlers.erase(it);
+          break;
+        }
+        ++it;
+      }
+    });
   }
   return 0;
 }

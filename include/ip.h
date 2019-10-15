@@ -68,18 +68,6 @@ static_assert(sizeof(ip_header_t) == 5 * 4, "IP header size mismatch");
 static const uint16_t ethertype = 0x0800;
 
 /**
- * @brief Wrap IP read handler for posting on global read handler queue.
- *
- * This function shall be used to implement auto answering for protocols on top
- * of IP, such as ICMP.
- *
- * @param proto protocol code.  If proto < 0, catch all protocols.
- * @param handler handler to wrap
- * @return device::read_handler_t
- */
-device::read_handler_t wrap_read_handler(int16_t proto, read_handler_t handler);
-
-/**
  * @brief Asynchronously read an IP packet.
  *
  * As recommended in https://tools.ietf.org/html/rfc791#section-3.3

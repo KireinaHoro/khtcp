@@ -35,6 +35,15 @@ struct core {
 
   eth::frame_receive_callback eth_callback;
 
+  /**
+   * @brief Payload handler list.
+   */
+  std::list<device::read_handler_t> read_handlers;
+  /**
+   * @brief Strand to prevent concurrent access to the payload handler list.
+   */
+  boost::asio::io_context::strand read_handlers_strand;
+
   struct deleter {
     deleter() { ::unlink(SERVER_ENDPOINT); }
     ~deleter() { ::unlink(SERVER_ENDPOINT); }

@@ -56,15 +56,6 @@ struct device_t {
   std::vector<uint8_t *> ip_addrs;
 
   /**
-   * @brief Payload handler list.
-   */
-  std::list<read_handler_t> read_handlers;
-  /**
-   * @brief Strand to prevent concurrent access to the payload handler list.
-   */
-  boost::asio::io_context::strand read_handlers_strand;
-
-  /**
    * @brief Wraps the injection operation for thread safety.
    *
    * We do not know if pcap_inject is thread safe, and the inject handler may be

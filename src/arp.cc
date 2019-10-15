@@ -14,10 +14,10 @@ struct eth_holder {
 // IP -> <MAC, timeout>
 std::map<uint32_t, std::pair<eth_holder, int>> neighbor_map;
 
-device::read_handler_t wrap_read_handler(read_handler_t handler) {
+device::read_handler_t wrap_read_handler(int dev_id_, read_handler_t handler) {
   return [=](int dev_id, uint16_t ethertype, const uint8_t *packet_ptr,
              int packet_len) -> bool {
-    if (ethertype != arp::ethertype) {
+    if (dev_id_ != dev_id || ethertype != arp::ethertype) {
       return false;
     }
     auto hdr = (arp_header_t *)packet_ptr;
@@ -121,13 +121,11 @@ void start(int dev_id) {
 }
 
 void async_read_arp(int dev_id, read_handler_t &&handler) {
-  boost::asio::post(
-      device::get_device_handle(dev_id).read_handlers_strand, [=]() {
-        auto &device = device::get_device_handle(dev_id);
-        device.read_handlers.push_back(wrap_read_handler(handler));
-        BOOST_LOG_TRIVIAL(trace)
-            << "ARP read handler queued on device " << device.name;
-      });
+  boost::asio::post(core::get().read_handlers_strand, [=]() {
+    core::get().read_handlers.push_back(wrap_read_handler(dev_id, handler));
+    BOOST_LOG_TRIVIAL(trace) << "ARP read handler queued for device "
+                             << device::get_device_handle(dev_id).name;
+  });
 }
 
 void async_write_arp(int dev_id, uint16_t opcode, const eth::addr_t sender_mac,

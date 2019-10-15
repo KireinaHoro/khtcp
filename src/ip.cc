@@ -10,11 +10,11 @@
 
 namespace khtcp {
 namespace ip {
-device::read_handler_t wrap_read_handler(int16_t proto,
+device::read_handler_t wrap_read_handler(int dev_id_, int16_t proto,
                                          read_handler_t handler) {
   return [=](int dev_id, uint16_t ethertype, const uint8_t *packet_ptr,
              int packet_len) -> bool {
-    if (ethertype != ip::ethertype) {
+    if (dev_id_ != dev_id || ethertype != ip::ethertype) {
       return false;
     }
     auto hdr_ptr = (const ip_header_t *)packet_ptr;
@@ -55,13 +55,12 @@ bool default_handler(int dev_id, const void *payload_ptr, uint64_t payload_len,
 void start(int dev_id) { async_read_ip(dev_id, -1, default_handler); }
 
 void async_read_ip(int dev_id, int proto, read_handler_t &&handler) {
-  boost::asio::post(
-      device::get_device_handle(dev_id).read_handlers_strand, [=]() {
-        auto &device = device::get_device_handle(dev_id);
-        device.read_handlers.push_back(wrap_read_handler(proto, handler));
-        BOOST_LOG_TRIVIAL(trace)
-            << "IP read handler queued on device " << device.name;
-      });
+  boost::asio::post(core::get().read_handlers_strand, [=]() {
+    core::get().read_handlers.push_back(
+        wrap_read_handler(dev_id, proto, handler));
+    BOOST_LOG_TRIVIAL(trace) << "IP read handler queued for device "
+                             << device::get_device_handle(dev_id).name;
+  });
 }
 
 uint16_t ip_checksum(const void *vdata, size_t length) {

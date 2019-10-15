@@ -41,9 +41,7 @@ int device_t::start_capture() {
   return 0;
 }
 
-device_t::device_t()
-    : read_handlers_strand(core::get().io_context),
-      inject_strand(core::get().io_context) {}
+device_t::device_t() : inject_strand(core::get().io_context) {}
 
 device_t::~device_t() {
   for (auto &ip : ip_addrs) {
