@@ -62,7 +62,8 @@ void device_t::handle_sniff() {
   pcap_pkthdr hdr;
   auto pkt = pcap_next(pcap_handle, &hdr);
   BOOST_LOG_TRIVIAL(trace) << "Captured frame of length " << hdr.len
-                           << " from device " << name;
+                           << " from device " << name << ", caplen "
+                           << hdr.caplen;
 
   // invoke upper handler
   auto callback = eth::get_frame_receive_callback();

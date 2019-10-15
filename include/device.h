@@ -38,7 +38,7 @@ using read_handler_t = std::function<bool(int, uint16_t, const uint8_t *, int)>;
  */
 using write_handler_t = std::function<void(int)>;
 
-const size_t CAPTURE_BUFSIZ = 8192;
+const size_t CAPTURE_BUFSIZ = 65536;
 const size_t PACKET_TIMEOUT = 2;
 
 /**
