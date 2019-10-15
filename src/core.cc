@@ -76,7 +76,7 @@ void client_request_handler(const boost::system::error_code &ec,
     case ETHERNET_READ:
       eth::async_read_frame(
           req.eth_read.dev_id,
-          [&, buf, resp](int dev_id, uint16_t ethertype,
+          [buf, resp, &sock](int dev_id, uint16_t ethertype,
                          const uint8_t *packet_ptr, int len) -> bool {
             resp->payload_len = len;
             resp->eth_read.dev_id = dev_id;
@@ -94,15 +94,16 @@ void client_request_handler(const boost::system::error_code &ec,
           });
       break;
     case ETHERNET_WRITE: {
+      int dev_id = req.eth_read.dev_id;
       void *payload_ptr = malloc(req.payload_len);
       boost::asio::read(sock,
                         boost::asio::buffer(payload_ptr, req.payload_len));
       eth::async_write_frame(payload_ptr, req.payload_len,
                              req.eth_write.ethertype,
                              req.eth_write.mac.sll_addr, req.eth_write.dev_id,
-                             [&, buf, resp](int ret) {
+                             [buf, resp, payload_ptr, dev_id, &sock](int ret) {
                                resp->payload_len = 0;
-                               resp->eth_write.dev_id = req.eth_read.dev_id;
+                               resp->eth_write.dev_id = dev_id;
                                try {
                                  boost::asio::write(sock, buf);
                                } catch (const std::exception &e) {
@@ -118,8 +119,9 @@ void client_request_handler(const boost::system::error_code &ec,
     case ARP_READ:
       arp::async_read_arp(
           req.arp_read.dev_id,
-          [&, buf, resp](int dev_id, uint16_t opcode, eth::addr_t sender_mac,
-                         ip::addr_t sender_ip, eth::addr_t target_mac,
+          [buf, resp, &sock](int dev_id, uint16_t opcode,
+                             eth::addr_t sender_mac, ip::addr_t sender_ip,
+                             eth::addr_t target_mac,
                          ip::addr_t target_ip) -> bool {
             resp->payload_len = 0;
             resp->arp_read.dev_id = dev_id;
@@ -149,7 +151,7 @@ void client_request_handler(const boost::system::error_code &ec,
                            (uint8_t *)&req.arp_write.sender_ip.sin_addr,
                            req.arp_write.target_mac.sll_addr,
                            (uint8_t *)&req.arp_write.target_ip.sin_addr,
-                           [&, buf, resp](int dev_id, int ret) {
+                           [buf, resp, &sock](int dev_id, int ret) {
                              resp->payload_len = 0;
                              resp->arp_write.dev_id = dev_id;
 

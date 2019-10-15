@@ -166,41 +166,43 @@ void async_resolve_mac(int dev_id, const ip::addr_t dst,
                        resolve_mac_handler_t &&handler) {
   auto key = *((uint32_t *)dst);
   auto t = new boost::asio::deadline_timer(core::get().io_context);
-  static std::function<void(int)> check_mac = [=](int n) {
-    if (neighbor_map.find(key) == neighbor_map.end()) {
-      // send ARP query.
-      auto &device = device::get_device_handle(dev_id);
-      async_write_arp(
-          dev_id, 0x1, device.addr, device.ip_addrs[0], eth::ETH_BROADCAST, dst,
-          [=](int dev_id, int ret) {
-            if (ret != PCAP_ERROR) {
-              if (n < 50) {
-                t->expires_from_now(boost::posix_time::milliseconds(20));
-                t->async_wait([=](auto ec) {
-                  if (!ec) {
-                    check_mac(n + 1);
+  static std::function<void(int, int, resolve_mac_handler_t,
+                            boost::asio::deadline_timer *, int)>
+      check_mac = [](int n, int dev_id, auto handler, auto t, auto key) {
+        if (neighbor_map.find(key) == neighbor_map.end()) {
+          // send ARP query.
+          auto &device = device::get_device_handle(dev_id);
+          async_write_arp(
+              dev_id, 0x1, device.addr, device.ip_addrs[0], eth::ETH_BROADCAST,
+              (const uint8_t *)&key, [=](int dev_id, int ret) {
+                if (ret != PCAP_ERROR) {
+                  if (n < 50) {
+                    t->expires_from_now(boost::posix_time::milliseconds(20));
+                    t->async_wait([=](auto ec) {
+                      if (!ec) {
+                        check_mac(n + 1, dev_id, handler, t, key);
+                      } else {
+                        BOOST_LOG_TRIVIAL(warning)
+                            << "Resolve MAC timer failed: " << ec.message();
+                        delete t;
+                      }
+                    });
                   } else {
-                    BOOST_LOG_TRIVIAL(warning)
-                        << "Resolve MAC timer failed: " << ec.message();
+                    handler(EHOSTUNREACH, nullptr);
                     delete t;
                   }
-                });
-              } else {
-                handler(EHOSTUNREACH, nullptr);
-                delete t;
-              }
-            } else {
-              BOOST_LOG_TRIVIAL(error) << "Failed to do ARP resolution";
-            }
-          });
-    } else {
-      BOOST_LOG_TRIVIAL(trace)
-          << "ARP table hit for IP " << util::ip_to_string(dst);
-      handler(0, neighbor_map[key].first.data);
-      delete t;
-    }
-  };
-  check_mac(0);
+                } else {
+                  BOOST_LOG_TRIVIAL(error) << "Failed to do ARP resolution";
+                }
+              });
+        } else {
+          BOOST_LOG_TRIVIAL(trace) << "ARP table hit for IP "
+                                   << util::ip_to_string((const uint8_t *)&key);
+          handler(0, neighbor_map[key].first.data);
+          delete t;
+        }
+      };
+  check_mac(0, dev_id, handler, t, key);
 }
 
 } // namespace arp
