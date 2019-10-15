@@ -29,6 +29,9 @@ enum request_type {
 
   ARP_READ,
   ARP_WRITE,
+
+  IP_READ,
+  IP_WRITE,
 };
 
 struct request {
@@ -66,6 +69,19 @@ struct request {
       struct sockaddr_ll target_mac;
       struct sockaddr_in target_ip;
     } arp_write;
+
+    struct {
+      int dev_id;
+      uint8_t proto;
+    } ip_read;
+    struct {
+      int dev_id;
+      struct sockaddr_in src;
+      struct sockaddr_in dst;
+      uint8_t proto;
+      uint8_t dscp;
+      uint8_t ttl;
+    } ip_write;
   };
 };
 
@@ -103,6 +119,17 @@ struct response {
     struct {
       int dev_id;
     } arp_write;
+
+    struct {
+      int dev_id;
+      struct sockaddr_in src;
+      struct sockaddr_in dst;
+      uint8_t dscp;
+    } ip_read;
+    struct {
+      int dev_id;
+      int ret;
+    } ip_write;
   };
 };
 

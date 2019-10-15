@@ -77,7 +77,7 @@ void client_request_handler(const boost::system::error_code &ec,
       eth::async_read_frame(
           req.eth_read.dev_id,
           [buf, resp, &sock](int dev_id, uint16_t ethertype,
-                         const uint8_t *packet_ptr, int len) -> bool {
+                             const uint8_t *packet_ptr, int len) -> bool {
             resp->payload_len = len;
             resp->eth_read.dev_id = dev_id;
             resp->eth_read.ethertype = ethertype;
@@ -122,7 +122,7 @@ void client_request_handler(const boost::system::error_code &ec,
           [buf, resp, &sock](int dev_id, uint16_t opcode,
                              eth::addr_t sender_mac, ip::addr_t sender_ip,
                              eth::addr_t target_mac,
-                         ip::addr_t target_ip) -> bool {
+                             ip::addr_t target_ip) -> bool {
             resp->payload_len = 0;
             resp->arp_read.dev_id = dev_id;
             resp->arp_read.opcode = opcode;
@@ -168,6 +168,63 @@ void client_request_handler(const boost::system::error_code &ec,
                              free(resp);
                            });
       break;
+    case IP_READ:
+      ip::async_read_ip(
+          req.ip_read.dev_id, req.ip_read.proto,
+          [buf, resp, &sock](int dev_id, const void *payload_ptr,
+                             uint64_t payload_len, const khtcp::ip::addr_t src,
+                             const khtcp::ip::addr_t dst, uint8_t dscp,
+                             const void *opt) -> bool {
+            resp->payload_len = payload_len;
+            resp->ip_read.dev_id = dev_id;
+            resp->ip_read.dscp = dscp;
+            memcpy(&resp->ip_read.dst.sin_addr, dst, 4);
+            resp->ip_read.dst.sin_family = AF_INET;
+            memcpy(&resp->ip_read.src.sin_addr, src, 4);
+            resp->ip_read.src.sin_family = AF_INET;
+
+            try {
+              boost::asio::write(sock, buf);
+              BOOST_LOG_TRIVIAL(trace)
+                  << "Sending payload with length " << payload_len;
+
+              boost::asio::write(sock,
+                                 boost::asio::buffer(payload_ptr, payload_len));
+            } catch (const std::exception &e) {
+              BOOST_LOG_TRIVIAL(error)
+                  << "Exception in client handler: " << e.what();
+            }
+            BOOST_LOG_TRIVIAL(trace) << "Sent response #" << resp->id;
+            free(resp);
+            return true;
+          });
+      break;
+    case IP_WRITE: {
+      void *payload_ptr = malloc(req.payload_len);
+      boost::asio::read(sock,
+                        boost::asio::buffer(payload_ptr, req.payload_len));
+      ip::async_write_ip(
+          req.ip_write.dev_id, (uint8_t *)&req.ip_write.src.sin_addr,
+          (uint8_t *)&req.ip_write.dst.sin_addr, req.ip_write.proto,
+          req.ip_write.dscp, req.ip_write.ttl, payload_ptr, req.payload_len,
+          [buf, resp, payload_ptr, &sock](int dev_id, int ret) {
+            resp->payload_len = 0;
+            resp->ip_write.dev_id = dev_id;
+            resp->ip_write.ret = ret;
+
+            try {
+              boost::asio::write(sock, buf);
+            } catch (const std::exception &e) {
+              BOOST_LOG_TRIVIAL(error)
+                  << "Exception in client handler: " << e.what();
+            }
+
+            BOOST_LOG_TRIVIAL(trace) << "Sent response #" << resp->id;
+            free(resp);
+            free(payload_ptr);
+          });
+      break;
+    }
     default:
       BOOST_LOG_TRIVIAL(warning)
           << "Unknown request " << req.type << " from client " << client_id;
