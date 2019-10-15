@@ -82,7 +82,7 @@ void device_t::handle_sniff() {
 int device_t::inject_frame(const uint8_t *buf, size_t len) {
   BOOST_LOG_TRIVIAL(trace) << "Sending frame with length " << len
                            << " on device " << name;
-  return pcap_inject(pcap_handle, buf, len);
+  return pcap_sendpacket(pcap_handle, buf, len);
 }
 
 void device_t::async_inject_frame(const uint8_t *buf, size_t len,
