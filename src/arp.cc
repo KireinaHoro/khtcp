@@ -14,7 +14,8 @@ struct eth_holder {
 // IP -> <MAC, timeout>
 std::map<uint32_t, std::pair<eth_holder, int>> neighbor_map;
 
-device::read_handler_t wrap_read_handler(int dev_id_, read_handler_t handler) {
+device::read_handler_t::first_type wrap_read_handler(int dev_id_,
+                                                     read_handler_t handler) {
   return [=](int dev_id, uint16_t ethertype, const uint8_t *packet_ptr,
              int packet_len) -> bool {
     if (dev_id_ != dev_id || ethertype != arp::ethertype) {
@@ -113,9 +114,10 @@ void scan_arp_table() {
 
 void start(int dev_id) { async_read_arp(dev_id, default_handler); }
 
-void async_read_arp(int dev_id, read_handler_t &&handler) {
+void async_read_arp(int dev_id, read_handler_t &&handler, int client_id) {
   boost::asio::post(core::get().read_handlers_strand, [=]() {
-    core::get().read_handlers.push_back(wrap_read_handler(dev_id, handler));
+    core::get().read_handlers.emplace_back(wrap_read_handler(dev_id, handler),
+                                           client_id);
     BOOST_LOG_TRIVIAL(trace) << "ARP read handler queued for device "
                              << device::get_device_handle(dev_id).name;
   });
@@ -123,55 +125,65 @@ void async_read_arp(int dev_id, read_handler_t &&handler) {
 
 void async_write_arp(int dev_id, uint16_t opcode, const eth::addr_t sender_mac,
                      const ip::addr_t sender_ip, const eth::addr_t target_mac,
-                     const ip::addr_t target_ip, write_handler_t &&handler) {
-  auto packet_len =
-      sizeof(arp_header_t) + 2 * sizeof(eth::addr_t) + 2 * sizeof(ip::addr_t);
-  auto packet_buf = new uint8_t[packet_len];
-  auto hdr = (arp_header_t *)packet_buf;
-  hdr->hardware_type = boost::endian::endian_reverse((uint16_t)0x1);
-  hdr->protocol_type = boost::endian::endian_reverse((uint16_t)0x0800);
-  hdr->opcode = boost::endian::endian_reverse(opcode);
-  hdr->hardware_size = sizeof(eth::addr_t);
-  hdr->protocol_size = sizeof(ip::addr_t);
+                     const ip::addr_t target_ip, write_handler_t &&handler,
+                     int client_id) {
+  boost::asio::post(core::get().write_tasks_strand, [=]() {
+    core::get().write_tasks.emplace_back(
+        [=]() {
+          auto packet_len = sizeof(arp_header_t) + 2 * sizeof(eth::addr_t) +
+                            2 * sizeof(ip::addr_t);
+          auto packet_buf = new uint8_t[packet_len];
+          auto hdr = (arp_header_t *)packet_buf;
+          hdr->hardware_type = boost::endian::endian_reverse((uint16_t)0x1);
+          hdr->protocol_type = boost::endian::endian_reverse((uint16_t)0x0800);
+          hdr->opcode = boost::endian::endian_reverse(opcode);
+          hdr->hardware_size = sizeof(eth::addr_t);
+          hdr->protocol_size = sizeof(ip::addr_t);
 
-  auto smac = packet_buf + sizeof(arp_header_t);
-  auto sip = smac + sizeof(eth::addr_t);
-  auto tmac = sip + sizeof(ip::addr_t);
-  auto tip = tmac + sizeof(eth::addr_t);
+          auto smac = packet_buf + sizeof(arp_header_t);
+          auto sip = smac + sizeof(eth::addr_t);
+          auto tmac = sip + sizeof(ip::addr_t);
+          auto tip = tmac + sizeof(eth::addr_t);
 
-  memcpy(tmac, target_mac, sizeof(eth::addr_t));
-  memcpy(smac, sender_mac, sizeof(eth::addr_t));
-  memcpy(tip, target_ip, sizeof(ip::addr_t));
-  memcpy(sip, sender_ip, sizeof(ip::addr_t));
+          memcpy(tmac, target_mac, sizeof(eth::addr_t));
+          memcpy(smac, sender_mac, sizeof(eth::addr_t));
+          memcpy(tip, target_ip, sizeof(ip::addr_t));
+          memcpy(sip, sender_ip, sizeof(ip::addr_t));
 
-  BOOST_LOG_TRIVIAL(trace) << "Sending ARP packet on device "
-                           << device::get_device_handle(dev_id).name;
-  eth::async_write_frame(packet_buf, packet_len, arp::ethertype, target_mac,
-                         dev_id, [=](int ret) {
-                           handler(dev_id, ret);
-                           delete[] packet_buf;
-                         });
+          BOOST_LOG_TRIVIAL(trace) << "Sending ARP packet on device "
+                                   << device::get_device_handle(dev_id).name;
+
+          eth::async_write_frame(packet_buf, packet_len, arp::ethertype, tmac,
+                                 dev_id, [=](int ret) {
+                                   handler(dev_id, ret);
+                                   delete[] packet_buf;
+                                 });
+        },
+        client_id);
+  });
 }
 
 void async_resolve_mac(int dev_id, const ip::addr_t dst,
                        resolve_mac_handler_t &&handler) {
-  auto key = *((uint32_t *)dst);
+  BOOST_LOG_TRIVIAL(trace) << "Resolving MAC for " << util::ip_to_string(dst);
   auto t = new boost::asio::deadline_timer(core::get().io_context);
   static std::function<void(int, int, resolve_mac_handler_t,
-                            boost::asio::deadline_timer *, int)>
-      check_mac = [](int n, int dev_id, auto handler, auto t, auto key) {
-        if (neighbor_map.find(key) == neighbor_map.end()) {
+                            boost::asio::deadline_timer *, const uint8_t *)>
+      check_mac = [](int n, int dev_id, auto handler, auto t, auto dst) {
+        if (neighbor_map.find(*(uint32_t *)dst) == neighbor_map.end()) {
           // send ARP query.
           auto &device = device::get_device_handle(dev_id);
+          BOOST_LOG_TRIVIAL(trace)
+              << "Sending ARP query for " << util::ip_to_string(dst);
           async_write_arp(
               dev_id, 0x1, device.addr, device.ip_addrs[0], eth::ETH_BROADCAST,
-              (const uint8_t *)&key, [=](int dev_id, int ret) {
+              dst, [=](int dev_id, int ret) {
                 if (ret != PCAP_ERROR) {
                   if (n < 50) {
                     t->expires_from_now(boost::posix_time::milliseconds(20));
                     t->async_wait([=](auto ec) {
                       if (!ec) {
-                        check_mac(n + 1, dev_id, handler, t, key);
+                        check_mac(n + 1, dev_id, handler, t, dst);
                       } else {
                         BOOST_LOG_TRIVIAL(warning)
                             << "Resolve MAC timer failed: " << ec.message();
@@ -187,13 +199,13 @@ void async_resolve_mac(int dev_id, const ip::addr_t dst,
                 }
               });
         } else {
-          BOOST_LOG_TRIVIAL(trace) << "ARP table hit for IP "
-                                   << util::ip_to_string((const uint8_t *)&key);
-          handler(0, neighbor_map[key].first.data);
+          BOOST_LOG_TRIVIAL(trace)
+              << "ARP table hit for IP " << util::ip_to_string(dst);
+          handler(0, neighbor_map[*(uint32_t *)dst].first.data);
           delete t;
         }
       };
-  check_mac(0, dev_id, handler, t, key);
+  check_mac(0, dev_id, handler, t, dst);
 }
 
 } // namespace arp

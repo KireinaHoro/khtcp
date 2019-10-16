@@ -10,8 +10,8 @@
 
 namespace khtcp {
 namespace ip {
-device::read_handler_t wrap_read_handler(int16_t proto,
-                                         read_handler_t handler) {
+device::read_handler_t::first_type wrap_read_handler(int16_t proto,
+                                                     read_handler_t handler) {
   return [=](int dev_id, uint16_t ethertype, const uint8_t *packet_ptr,
              int packet_len) -> bool {
     if (ethertype != ip::ethertype) {
@@ -85,9 +85,10 @@ bool default_handler(const void *payload_ptr, uint64_t payload_len,
 
 void start() { async_read_ip(-1, default_handler); }
 
-void async_read_ip(int proto, read_handler_t &&handler) {
+void async_read_ip(int proto, read_handler_t &&handler, int client_id) {
   boost::asio::post(core::get().read_handlers_strand, [=]() {
-    core::get().read_handlers.push_back(wrap_read_handler(proto, handler));
+    core::get().read_handlers.emplace_back(wrap_read_handler(proto, handler),
+                                           client_id);
     BOOST_LOG_TRIVIAL(trace) << "IP read handler queued";
   });
 }
@@ -148,88 +149,98 @@ uint16_t ip_checksum(const void *vdata, size_t length) {
 void async_write_ip(const addr_t src, const addr_t dst, uint8_t proto,
                     uint8_t dscp, uint8_t ttl, const void *payload_ptr,
                     uint64_t payload_len, write_handler_t &&handler,
-                    uint16_t identification, bool df, const void *option) {
-  BOOST_LOG_TRIVIAL(trace) << "Sending IP packet with payload length "
-                           << payload_len;
+                    int client_id, uint16_t identification, bool df,
+                    const void *option) {
+  boost::asio::post(core::get().write_tasks_strand, [=]() {
+    core::get().write_tasks.emplace_back(
+        [=]() {
+          BOOST_LOG_TRIVIAL(trace)
+              << "Sending IP packet with payload length " << payload_len;
 
-  if (option) {
-    BOOST_LOG_TRIVIAL(error) << "Requested to send non-null option IP packet";
-    handler(-1);
-    return;
-  }
+          if (option) {
+            BOOST_LOG_TRIVIAL(error)
+                << "Requested to send non-null option IP packet";
+            handler(-1);
+            return;
+          }
 
-  const struct route *route;
-  auto got_route = lookup_route(dst, &route);
-  if (!got_route) {
-    // failed to get route for destination
-    BOOST_LOG_TRIVIAL(warning)
-        << "No route to host " << util::ip_to_string(dst);
-    handler(EHOSTUNREACH);
-    return;
-  }
-  if (route->type != route::DEV && route->type != route::VIA) {
-    BOOST_LOG_TRIVIAL(error) << "Unknown route type " << route->type;
-    handler(EINVAL);
-    return;
-  }
+          const struct route *route;
+          auto got_route = lookup_route(dst, &route);
+          if (!got_route) {
+            // failed to get route for destination
+            BOOST_LOG_TRIVIAL(warning)
+                << "No route to host " << util::ip_to_string(dst);
+            handler(EHOSTUNREACH);
+            return;
+          }
+          if (route->type != route::DEV && route->type != route::VIA) {
+            BOOST_LOG_TRIVIAL(error) << "Unknown route type " << route->type;
+            handler(EINVAL);
+            return;
+          }
 
-  const uint8_t *resolv_mac_ip = dst;
-  while (route->type != route::DEV) {
-    // lookup gateway address in routing table
-    resolv_mac_ip = route->nexthop.ip;
-    got_route = lookup_route(resolv_mac_ip, &route);
-    if (!got_route) {
-      BOOST_LOG_TRIVIAL(warning)
-          << "No route to host " << util::ip_to_string(resolv_mac_ip);
-      handler(EHOSTUNREACH);
-      return;
-    }
-  }
-  // we have a DEV route now
-  auto dev_id = route->nexthop.dev_id;
-
-  auto packet_len = sizeof(ip_header_t) + payload_len;
-  auto packet_ptr = new uint8_t[packet_len];
-  auto hdr = (ip_header_t *)packet_ptr;
-  auto packet_payload = ((uint8_t *)packet_ptr) + sizeof(ip_header_t);
-  hdr->version = 4;
-  hdr->ihl = 5;
-  hdr->dscp = dscp;
-  hdr->ecn = 0;
-  hdr->total_length = boost::endian::endian_reverse((uint16_t)packet_len);
-  hdr->identification = identification;
-  hdr->flags = boost::endian::endian_reverse((uint16_t)(df << 14));
-  hdr->ttl = ttl;
-  hdr->proto = proto;
-  memcpy(hdr->src_addr, src, sizeof(addr_t));
-  memcpy(hdr->dst_addr, dst, sizeof(addr_t));
-
-  hdr->header_csum = 0;
-  hdr->header_csum = ip_checksum(hdr, sizeof(ip_header_t));
-
-  memcpy(packet_payload, payload_ptr, payload_len);
-
-  auto mac_handler = [packet_ptr, packet_len, dev_id, dst,
-                      handler](int ret, const eth::addr_t addr) {
-    if (ret) {
-      BOOST_LOG_TRIVIAL(warning)
-          << "Failed to resolve MAC for " << util::ip_to_string(dst)
-          << ": Errno " << ret;
-      handler(ret);
-      delete[] packet_ptr;
-    } else {
-      eth::async_write_frame(
-          packet_ptr, packet_len, ip::ethertype, addr, dev_id, [=](int ret) {
-            if (ret) {
-              BOOST_LOG_TRIVIAL(error)
-                  << "Failed to write IP packet: Errno " << ret;
+          const uint8_t *resolv_mac_ip = dst;
+          while (route->type != route::DEV) {
+            // lookup gateway address in routing table
+            resolv_mac_ip = route->nexthop.ip;
+            got_route = lookup_route(resolv_mac_ip, &route);
+            if (!got_route) {
+              BOOST_LOG_TRIVIAL(warning) << "No route to gateway "
+                                         << util::ip_to_string(resolv_mac_ip);
+              handler(EHOSTUNREACH);
+              return;
             }
-            handler(ret);
-            delete[] packet_ptr;
-          });
-    }
-  };
-  arp::async_resolve_mac(dev_id, resolv_mac_ip, mac_handler);
+          }
+          // we have a DEV route now
+          auto dev_id = route->nexthop.dev_id;
+
+          auto packet_len = sizeof(ip_header_t) + payload_len;
+          auto packet_ptr = new uint8_t[packet_len];
+          auto hdr = (ip_header_t *)packet_ptr;
+          auto packet_payload = ((uint8_t *)packet_ptr) + sizeof(ip_header_t);
+          hdr->version = 4;
+          hdr->ihl = 5;
+          hdr->dscp = dscp;
+          hdr->ecn = 0;
+          hdr->total_length =
+              boost::endian::endian_reverse((uint16_t)packet_len);
+          hdr->identification = identification;
+          hdr->flags = boost::endian::endian_reverse((uint16_t)(df << 14));
+          hdr->ttl = ttl;
+          hdr->proto = proto;
+          memcpy(hdr->src_addr, src, sizeof(addr_t));
+          memcpy(hdr->dst_addr, dst, sizeof(addr_t));
+
+          hdr->header_csum = 0;
+          hdr->header_csum = ip_checksum(hdr, sizeof(ip_header_t));
+
+          memcpy(packet_payload, payload_ptr, payload_len);
+
+          auto mac_handler = [packet_ptr, packet_len, dev_id, dst,
+                              handler](int ret, const eth::addr_t addr) {
+            if (ret) {
+              BOOST_LOG_TRIVIAL(warning)
+                  << "Failed to resolve MAC for " << util::ip_to_string(dst)
+                  << ": Errno " << ret;
+              handler(ret);
+              delete[] packet_ptr;
+            } else {
+              eth::async_write_frame(
+                  packet_ptr, packet_len, ip::ethertype, addr, dev_id,
+                  [=](int ret) {
+                    if (ret) {
+                      BOOST_LOG_TRIVIAL(error)
+                          << "Failed to write IP packet: Errno " << ret;
+                    }
+                    handler(ret);
+                    delete[] packet_ptr;
+                  });
+            }
+          };
+          arp::async_resolve_mac(dev_id, resolv_mac_ip, mac_handler);
+        },
+        client_id);
+  });
 }
 
 bool route::operator<(const struct route &a) const {
@@ -253,10 +264,10 @@ boost::container::flat_set<struct route> routing_table;
 void add_route(struct route &&route) { routing_table.emplace(route); }
 
 bool lookup_route(const addr_t dst, const struct route **out_route) {
-  uint32_t addr = *(uint32_t *)dst;
+  uint32_t addr = boost::endian::endian_reverse(*(uint32_t *)dst);
   for (const auto &r : routing_table) {
-    uint32_t route_dst = *(uint32_t *)r.dst;
-    if (addr >> (32 - r.prefix) == route_dst >> (32 - r.prefix)) {
+    uint32_t route_dst = boost::endian::endian_reverse(*(uint32_t *)r.dst);
+    if (!r.prefix || addr >> (32 - r.prefix) == route_dst >> (32 - r.prefix)) {
       *out_route = &r;
       return true;
     }

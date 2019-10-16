@@ -49,9 +49,9 @@ int send_frame(const void *buf, int len, int ethtype, const void *destmac,
   return ret;
 }
 
-void async_read_frame(int id, read_handler_t &&handler) {
+void async_read_frame(int id, read_handler_t &&handler, int client_id) {
   boost::asio::post(core::get().read_handlers_strand, [=]() {
-    core::get().read_handlers.push_back(
+    core::get().read_handlers.emplace_back(
         [id, handler](int dev_id, uint16_t ethertype, const uint8_t *payload,
                       int len) -> bool {
           if (id != dev_id) {
@@ -59,22 +59,31 @@ void async_read_frame(int id, read_handler_t &&handler) {
           } else {
             return handler(dev_id, ethertype, payload, len);
           }
-        });
+        },
+        client_id);
     BOOST_LOG_TRIVIAL(trace) << "Ethernet read handler queued for device "
                              << device::get_device_handle(id).name;
   });
 }
 
 void async_write_frame(const void *buf, int len, int ethtype,
-                       const void *destmac, int id, write_handler_t &&handler) {
-  auto p = construct_frame(buf, len, ethtype, destmac, id);
-  auto frame_buf = p.first;
-  auto frame_len = p.second;
-  device::get_device_handle(id).async_inject_frame(frame_buf, frame_len,
-                                                   [=](int ret) {
-                                                     delete[] frame_buf;
-                                                     handler(ret);
-                                                   });
+                       const void *destmac, int id, write_handler_t &&handler,
+                       int client_id) {
+  boost::asio::post(core::get().write_tasks_strand, [=]() {
+    core::get().write_tasks.emplace_back(
+        [=]() {
+          auto p = construct_frame(buf, len, ethtype, destmac, id);
+          auto frame_buf = p.first;
+          auto frame_len = p.second;
+
+          device::get_device_handle(id).async_inject_frame(frame_buf, frame_len,
+                                                           [=](int ret) {
+                                                             handler(ret);
+                                                             delete[] frame_buf;
+                                                           });
+        },
+        client_id);
+  });
 }
 
 int set_frame_receive_callback(frame_receive_callback callback) {
@@ -110,7 +119,7 @@ int ethertype_broker_callback(const void *frame, int len, int dev_id) {
     boost::asio::post(core::get().read_handlers_strand, [=]() {
       auto it = core::get().read_handlers.begin();
       while (it != core::get().read_handlers.end()) {
-        if ((*it)(dev_id, ethertype, payload_ptr, payload_len)) {
+        if (it->first(dev_id, ethertype, payload_ptr, payload_len)) {
           // payload consumed
           core::get().read_handlers.erase(it);
           break;

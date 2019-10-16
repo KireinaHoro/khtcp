@@ -17,8 +17,23 @@
 #include "packetio.h"
 
 #include <boost/asio.hpp>
+#include <map>
 #include <memory>
 #include <unordered_map>
+
+#define CLEANUP_BUF(resp, req)                                                 \
+  {                                                                            \
+    free(resp);                                                                \
+    free(req);                                                                 \
+    auto it = get().outstanding_buffers.begin();                               \
+    while (it != get().outstanding_buffers.end()) {                            \
+      if (it->second == resp || it->second == req) {                           \
+        get().outstanding_buffers.erase(it++);                                 \
+      } else {                                                                 \
+        ++it;                                                                  \
+      }                                                                        \
+    }                                                                          \
+  }
 
 namespace khtcp {
 namespace core {
@@ -41,13 +56,31 @@ struct core {
    * @brief Strand to prevent concurrent access to the payload handler list.
    */
   boost::asio::io_context::strand read_handlers_strand;
+  /**
+   * @brief Outstanding buffers that are not yet freed.
+   *
+   * client_id -> [buffer]
+   *
+   * Buffers here will be freed when client request is finished or cancelled
+   * (due to disconnection).
+   */
+  std::multimap<int, void *> outstanding_buffers;
+
+  /**
+   * @brief Write handler list.
+   */
+  std::list<device::write_task_t> write_tasks;
+  /**
+   * @brief Strand to prevent concurrent access to the write handler list.
+   */
+  boost::asio::io_context::strand write_tasks_strand;
 
   boost::asio::local::stream_protocol::acceptor acceptor;
 
   std::unordered_map<
       int,
       std::pair<std::unique_ptr<boost::asio::local::stream_protocol::socket>,
-                struct request>>
+                struct request *>>
       clients;
 
   boost::asio::deadline_timer arp_table_timer;
@@ -66,6 +99,14 @@ struct core {
  * @return core&
  */
 core &get();
+
+/**
+ * @brief Cleans up the client with id once we discover that it has
+ * disconnected.
+ *
+ * @param client_id
+ */
+void cleanup_client(int client_id);
 } // namespace core
 } // namespace khtcp
 

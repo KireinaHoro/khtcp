@@ -27,17 +27,25 @@
 
 int main(int argc, char **argv) {
   char *device = nullptr;
-  if (argc > 2) {
-    std::cerr << "usage: " << argv[0] << " [interface]\n";
+  if (argc > 3 || argc < 2) {
+    std::cerr << "usage: " << argv[0] << " <default-route> [interface]\n";
     return -1;
-  } else if (argc == 2) {
-    device = argv[1];
+  } else if (argc == 3) {
+    device = argv[2];
   }
   khtcp::util::init_logging(boost::log::trivial::warning);
 
   khtcp::device::add_device(device);
 
   khtcp::eth::set_frame_receive_callback(khtcp::eth::ethertype_broker_callback);
+
+  khtcp::ip::route r;
+  r.type = khtcp::ip::route::VIA;
+  khtcp::util::string_to_ip("0", r.dst);
+  r.prefix = 0;
+  khtcp::util::string_to_ip(argv[1], r.nexthop.ip);
+  r.metric = 100;
+  khtcp::ip::add_route(std::move(r));
 
   std::cout << "Global Routing Table" << std::endl;
   khtcp::ip::print_route();

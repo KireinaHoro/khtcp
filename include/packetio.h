@@ -82,8 +82,9 @@ int send_frame(const void *buf, int len, int ethtype, const void *destmac,
  *
  * @param id The device to operate on.
  * @param handler handler to call when the read operation is done.
+ * @param client_id id for calling client, 0 for local (a server call).
  */
-void async_read_frame(int id, read_handler_t &&handler);
+void async_read_frame(int id, read_handler_t &&handler, int client_id = 0);
 
 /**
  * @brief Asynchronously encapsulate some data into an Ethernet II frame and
@@ -96,10 +97,12 @@ void async_read_frame(int id, read_handler_t &&handler);
  * @param id ID of the device (returned by `khtcp::mgmt::add_device`) to
  * send on.
  * @param handler The handler to call on after send completes.
+ * @param client_id id for calling client, 0 for local (a server call).
  * @see khtcp::mgmt::add_device
  */
 void async_write_frame(const void *buf, int len, int ethtype,
-                       const void *destmac, int id, write_handler_t &&handler);
+                       const void *destmac, int id, write_handler_t &&handler,
+                       int client_id = 0);
 
 /**
  * @brief Process a frame upon receiving it.

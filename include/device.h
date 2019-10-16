@@ -20,6 +20,7 @@
 #include <list>
 #include <pcap.h>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace khtcp {
@@ -28,9 +29,25 @@ namespace device {
 /**
  * @brief The read handler type.
  *
+ * If the read handler's purpose has been satisfied (e.g. read for a specific
+ * protocol), returns true.  Returns false otherwise.
+ *
+ * The tagged int is the client ID for the handler.
+ *
  * consumed(dev_id, ethertype, payload, len)
  */
-using read_handler_t = std::function<bool(int, uint16_t, const uint8_t *, int)>;
+using read_handler_t =
+    std::pair<std::function<bool(int, uint16_t, const uint8_t *, int)>, int>;
+/**
+ * @brief The write task type.
+ *
+ * The device write loops in the write task list to execute these functions.
+ * The task will be removed from the list after execution (the task shall post a
+ * new one if it wants a delayed retry).
+ *
+ * The tagged int is the client ID for the task.
+ */
+using write_task_t = std::pair<std::function<void()>, int>;
 /**
  * @brief The write handler type.
  *

@@ -71,8 +71,9 @@ static const uint16_t ethertype = 0x0800;
  *
  * @param proto protocol code
  * @param handler handler to call once packet has been received.
+ * @param client_id id for calling client, 0 for local (a server call).
  */
-void async_read_ip(int proto, read_handler_t &&handler);
+void async_read_ip(int proto, read_handler_t &&handler, int client_id = 0);
 
 /**
  * @brief Asynchronously write an IP packet.
@@ -87,6 +88,7 @@ void async_read_ip(int proto, read_handler_t &&handler);
  * @param payload_ptr pointer to payload data
  * @param payload_len payload data length
  * @param handler handler to call once packet has been sent
+ * @param client_id id for calling client, 0 for local (a server call).
  * @param identification Identification field, default = 0
  * @param df DF flag, default = true
  * @param option Option pointer, default = nullptr
@@ -94,8 +96,8 @@ void async_read_ip(int proto, read_handler_t &&handler);
 void async_write_ip(const addr_t src, const addr_t dst, uint8_t proto,
                     uint8_t dscp, uint8_t ttl, const void *payload_ptr,
                     uint64_t payload_len, write_handler_t &&handler,
-                    uint16_t identification = 0, bool df = true,
-                    const void *option = nullptr);
+                    int client_id = 0, uint16_t identification = 0,
+                    bool df = true, const void *option = nullptr);
 
 /**
  * @brief Start IP auto answering.

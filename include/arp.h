@@ -75,8 +75,9 @@ static const uint16_t ethertype = 0x0806;
  *
  * @param dev_id device id to receive ARP packet from.
  * @param handler handler to call once packet has been received.
+ * @param client_id id for calling client, 0 for local (a server call).
  */
-void async_read_arp(int dev_id, read_handler_t &&handler);
+void async_read_arp(int dev_id, read_handler_t &&handler, int client_id = 0);
 
 /**
  * @brief Asynchronously write an ARP packet.
@@ -88,10 +89,12 @@ void async_read_arp(int dev_id, read_handler_t &&handler);
  * @param target_mac target MAC.
  * @param target_ip target IP.
  * @param handler handler to call once packet has been received.
+ * @param client_id id for calling client, 0 for local (a server call).
  */
 void async_write_arp(int dev_id, uint16_t opcode, const eth::addr_t sender_mac,
                      const ip::addr_t sender_ip, const eth::addr_t target_mac,
-                     const ip::addr_t target_ip, write_handler_t &&handler);
+                     const ip::addr_t target_ip, write_handler_t &&handler,
+                     int client_id = 0);
 
 /**
  * @brief Asynchronously resolve MAC address for given IP destination.
