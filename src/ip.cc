@@ -19,14 +19,18 @@ device::read_handler_t::first_type wrap_read_handler(int16_t proto,
     }
     auto hdr_ptr = (const ip_header_t *)packet_ptr;
 
-    auto &device = device::get_device_handle(dev_id);
-    BOOST_LOG_TRIVIAL(trace) << "Received IP packet on device " << device.name
+    BOOST_LOG_TRIVIAL(trace) << "Received IP packet on device "
+                             << device::get_device_handle(dev_id).name
                              << " with proto " << (int)hdr_ptr->proto;
     auto unicast = false;
     auto self_sent = false;
-    for (const auto &ip : device.ip_addrs) {
-      unicast = unicast || !memcmp(ip, hdr_ptr->dst_addr, sizeof(addr_t));
-      self_sent = self_sent || !memcmp(ip, hdr_ptr->src_addr, sizeof(addr_t));
+    for (const auto &dev : core::get().devices) {
+      for (const auto &ip : dev->ip_addrs) {
+        BOOST_LOG_TRIVIAL(trace)
+            << "Checking local address " << util::ip_to_string(ip);
+        unicast = unicast || !memcmp(ip, hdr_ptr->dst_addr, sizeof(addr_t));
+        self_sent = self_sent || !memcmp(ip, hdr_ptr->src_addr, sizeof(addr_t));
+      }
     }
     if (proto < 0 || hdr_ptr->proto == proto) {
       uint16_t hdr_len = hdr_ptr->ihl * sizeof(uint32_t);
@@ -216,12 +220,12 @@ void async_write_ip(const addr_t src, const addr_t dst, uint8_t proto,
 
           memcpy(packet_payload, payload_ptr, payload_len);
 
-          auto mac_handler = [packet_ptr, packet_len, dev_id, dst,
+          auto mac_handler = [packet_ptr, packet_len, dev_id, resolv_mac_ip,
                               handler](int ret, const eth::addr_t addr) {
             if (ret) {
               BOOST_LOG_TRIVIAL(warning)
-                  << "Failed to resolve MAC for " << util::ip_to_string(dst)
-                  << ": Errno " << ret;
+                  << "Failed to resolve MAC for "
+                  << util::ip_to_string(resolv_mac_ip) << ": Errno " << ret;
               handler(ret);
               delete[] packet_ptr;
             } else {
