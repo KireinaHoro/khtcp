@@ -20,6 +20,8 @@ namespace khtcp {
 namespace ip {
 using addr_t = uint8_t[4];
 
+static const addr_t IP_BROADCAST = {0xff, 0xff, 0xff, 0xff};
+
 /**
  * @brief The IP header.
  *

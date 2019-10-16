@@ -126,6 +126,10 @@ device::read_handler_t::first_type wrap_read_handler(int16_t proto,
                          payload_len, [hdr_ptr](auto ret) {
                            if (!ret) {
                              BOOST_LOG_TRIVIAL(trace) << "IP packet forwarded.";
+                           } else if (ret == ECANCELED) {
+                             // non-local broadcast
+                             BOOST_LOG_TRIVIAL(debug)
+                                 << "Not forwarding non-local broadcast.";
                            } else {
                              BOOST_LOG_TRIVIAL(error)
                                  << "IP packet forwarding from "
@@ -176,18 +180,18 @@ void async_write_ip(const addr_t src, const addr_t dst, uint8_t proto,
   boost::asio::post(core::get().write_tasks_strand, [=]() {
     core::get().write_tasks.emplace_back(
         [=]() {
-          if (client_id != 0) {
-            // enforce src to be local IP if request from client
-            bool is_local = false;
-            for (const auto &dev : core::get().devices) {
-              for (const auto &ip : dev->ip_addrs) {
-                BOOST_LOG_TRIVIAL(trace)
-                    << "Checking local address " << util::ip_to_string(ip);
-                if (!memcmp(ip, src, sizeof(addr_t))) {
-                  is_local = true;
-                }
+          bool is_local = false;
+          for (const auto &dev : core::get().devices) {
+            for (const auto &ip : dev->ip_addrs) {
+              BOOST_LOG_TRIVIAL(trace)
+                  << "Checking local address " << util::ip_to_string(ip);
+              if (!memcmp(ip, src, sizeof(addr_t))) {
+                is_local = true;
               }
             }
+          }
+          if (client_id != 0) {
+            // enforce src to be local IP if request from client
             if (!is_local) {
               BOOST_LOG_TRIVIAL(error)
                   << "Client " << client_id << " tried to send from "
@@ -225,8 +229,10 @@ void async_write_ip(const addr_t src, const addr_t dst, uint8_t proto,
             return;
           }
 
+          bool nonlocal_route = false;
           const uint8_t *resolv_mac_ip = dst;
           while (route->type != route::DEV) {
+            nonlocal_route = true;
             // lookup gateway address in routing table
             resolv_mac_ip = route->nexthop.ip;
             got_route = lookup_route(resolv_mac_ip, &route);
@@ -241,6 +247,17 @@ void async_write_ip(const addr_t src, const addr_t dst, uint8_t proto,
           }
           // we have a DEV route now
           auto dev_id = route->nexthop.dev_id;
+
+          bool is_broadcast = false;
+          if (!nonlocal_route) {
+            // check if is broadcast address
+            uint32_t iform = boost::endian::endian_reverse(*(uint32_t *)dst);
+            uint32_t subnet_mask = route->prefix == 0
+                                       ? 0
+                                       : *(uint32_t *)IP_BROADCAST
+                                             << (32 - route->prefix);
+            is_broadcast = (iform | subnet_mask) == 0xffffffff;
+          }
 
           auto packet_len = sizeof(ip_header_t) + payload_len;
           auto packet_ptr = new uint8_t[packet_len];
@@ -264,18 +281,11 @@ void async_write_ip(const addr_t src, const addr_t dst, uint8_t proto,
 
           memcpy(packet_payload, payload_ptr, payload_len);
 
-          auto mac_handler = [packet_ptr, packet_len, dev_id, resolv_mac_ip,
-                              handler](int ret, const eth::addr_t addr) {
-            if (ret) {
-              BOOST_LOG_TRIVIAL(warning)
-                  << "Failed to resolve MAC for "
-                  << util::ip_to_string(resolv_mac_ip) << ": Errno " << ret;
-              handler(ret);
-              delete[] packet_ptr;
-            } else {
+          if (is_broadcast) {
+            if (is_local) {
               eth::async_write_frame(
-                  packet_ptr, packet_len, ip::ethertype, addr, dev_id,
-                  [=](int ret) {
+                  packet_ptr, packet_len, ip::ethertype, eth::ETH_BROADCAST,
+                  dev_id, [=](int ret) {
                     if (ret) {
                       BOOST_LOG_TRIVIAL(error)
                           << "Failed to write IP packet: Errno " << ret;
@@ -283,9 +293,37 @@ void async_write_ip(const addr_t src, const addr_t dst, uint8_t proto,
                     handler(ret);
                     delete[] packet_ptr;
                   });
+            } else {
+              BOOST_LOG_TRIVIAL(trace)
+                  << "Non-local IP broadcast to " << util::ip_to_string(dst)
+                  << " not repeated";
+              handler(ECANCELED);
+              delete[] packet_ptr;
             }
-          };
-          arp::async_resolve_mac(dev_id, resolv_mac_ip, mac_handler);
+          } else {
+            auto mac_handler = [packet_ptr, packet_len, dev_id, resolv_mac_ip,
+                                handler](int ret, const eth::addr_t addr) {
+              if (ret) {
+                BOOST_LOG_TRIVIAL(warning)
+                    << "Failed to resolve MAC for "
+                    << util::ip_to_string(resolv_mac_ip) << ": Errno " << ret;
+                handler(ret);
+                delete[] packet_ptr;
+              } else {
+                eth::async_write_frame(
+                    packet_ptr, packet_len, ip::ethertype, addr, dev_id,
+                    [=](int ret) {
+                      if (ret) {
+                        BOOST_LOG_TRIVIAL(error)
+                            << "Failed to write IP packet: Errno " << ret;
+                      }
+                      handler(ret);
+                      delete[] packet_ptr;
+                    });
+              }
+            };
+            arp::async_resolve_mac(dev_id, resolv_mac_ip, mac_handler);
+          }
         },
         client_id);
   });
