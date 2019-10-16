@@ -179,8 +179,8 @@ void async_resolve_mac(int dev_id, const ip::addr_t dst,
               dev_id, 0x1, device.addr, device.ip_addrs[0], eth::ETH_BROADCAST,
               dst, [=](int dev_id, int ret) {
                 if (ret != PCAP_ERROR) {
-                  if (n < 50) {
-                    t->expires_from_now(boost::posix_time::milliseconds(20));
+                  if (n < 5) {
+                    t->expires_from_now(boost::posix_time::milliseconds(200));
                     t->async_wait([=](auto ec) {
                       if (!ec) {
                         check_mac(n + 1, dev_id, handler, t, dst);
