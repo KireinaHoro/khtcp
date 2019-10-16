@@ -25,12 +25,16 @@ device::read_handler_t wrap_read_handler(int16_t proto,
     auto unicast = false;
     auto self_sent = false;
     for (const auto &ip : device.ip_addrs) {
-      unicast = !memcmp(ip, hdr_ptr->dst_addr, sizeof(addr_t));
-      self_sent = !memcmp(ip, hdr_ptr->src_addr, sizeof(addr_t));
+      unicast = unicast || !memcmp(ip, hdr_ptr->dst_addr, sizeof(addr_t));
+      self_sent = self_sent || !memcmp(ip, hdr_ptr->src_addr, sizeof(addr_t));
     }
     if (proto < 0 || hdr_ptr->proto == proto) {
       uint16_t hdr_len = hdr_ptr->ihl * sizeof(uint32_t);
-      BOOST_ASSERT(hdr_len == 20);
+      if (hdr_len != 20) {
+        BOOST_LOG_TRIVIAL(warning)
+            << "Dropping IP packet with unsupported header length " << hdr_len;
+        return false;
+      }
       auto option_ptr = ((const uint8_t *)packet_ptr) + sizeof(ip_header_t);
       auto payload_ptr = ((const uint8_t *)packet_ptr) + hdr_len;
       auto payload_len =
@@ -45,12 +49,16 @@ device::read_handler_t wrap_read_handler(int16_t proto,
         // forward the packet, keeping the handler intact
         async_write_ip(hdr_ptr->src_addr, hdr_ptr->dst_addr, hdr_ptr->proto,
                        hdr_ptr->dscp, hdr_ptr->ttl, payload_ptr, payload_len,
-                       [](auto ret) {
+                       [hdr_ptr](auto ret) {
                          if (!ret) {
                            BOOST_LOG_TRIVIAL(trace) << "IP packet forwarded.";
                          } else {
                            BOOST_LOG_TRIVIAL(error)
-                               << "IP packet forwarding failed: Errno " << ret;
+                               << "IP packet forwarding from "
+                               << util::ip_to_string(hdr_ptr->src_addr)
+                               << " to "
+                               << util::ip_to_string(hdr_ptr->dst_addr)
+                               << " failed: Errno " << ret;
                          }
                        });
         return false;
