@@ -118,21 +118,25 @@ device::read_handler_t::first_type wrap_read_handler(int16_t proto,
         // ignore packets sent by self, keeping the handler intact
         return false;
       } else {
-        // forward the packet, keeping the handler intact
-        async_write_ip(hdr_ptr->src_addr, hdr_ptr->dst_addr, hdr_ptr->proto,
-                       hdr_ptr->dscp, hdr_ptr->ttl, payload_ptr, payload_len,
-                       [hdr_ptr](auto ret) {
-                         if (!ret) {
-                           BOOST_LOG_TRIVIAL(trace) << "IP packet forwarded.";
-                         } else {
-                           BOOST_LOG_TRIVIAL(error)
-                               << "IP packet forwarding from "
-                               << util::ip_to_string(hdr_ptr->src_addr)
-                               << " to "
-                               << util::ip_to_string(hdr_ptr->dst_addr)
-                               << " failed: Errno " << ret;
-                         }
-                       });
+        if (hdr_ptr->ttl == 0) {
+          // TODO: send ICMP Time Exceeded Message back to src
+        } else {
+          // forward the packet, keeping the handler intact
+          async_write_ip(hdr_ptr->src_addr, hdr_ptr->dst_addr, hdr_ptr->proto,
+                         hdr_ptr->dscp, hdr_ptr->ttl - 1, payload_ptr,
+                         payload_len, [hdr_ptr](auto ret) {
+                           if (!ret) {
+                             BOOST_LOG_TRIVIAL(trace) << "IP packet forwarded.";
+                           } else {
+                             BOOST_LOG_TRIVIAL(error)
+                                 << "IP packet forwarding from "
+                                 << util::ip_to_string(hdr_ptr->src_addr)
+                                 << " to "
+                                 << util::ip_to_string(hdr_ptr->dst_addr)
+                                 << " failed: Errno " << ret;
+                           }
+                         });
+        }
         return false;
       }
     } else {
@@ -211,6 +215,8 @@ void async_write_ip(const addr_t src, const addr_t dst, uint8_t proto,
             // failed to get route for destination
             BOOST_LOG_TRIVIAL(warning)
                 << "No route to host " << util::ip_to_string(dst);
+            // TODO: send ICMP Destination Unreachable Message
+            // back to src
             handler(EHOSTUNREACH);
             return;
           }
@@ -228,6 +234,8 @@ void async_write_ip(const addr_t src, const addr_t dst, uint8_t proto,
             if (!got_route) {
               BOOST_LOG_TRIVIAL(warning) << "No route to gateway "
                                          << util::ip_to_string(resolv_mac_ip);
+              // TODO: send ICMP Destination Unreachable Message
+              // back to src
               handler(EHOSTUNREACH);
               return;
             }
