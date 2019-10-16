@@ -106,6 +106,8 @@ void async_write_arp(int dev_id, uint16_t opcode, const eth::addr_t sender_mac,
 void async_resolve_mac(int dev_id, const ip::addr_t dst,
                        resolve_mac_handler_t &&handler);
 
+void scan_arp_table();
+
 } // namespace arp
 } // namespace khtcp
 

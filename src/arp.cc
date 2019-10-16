@@ -111,14 +111,7 @@ void scan_arp_table() {
   timer.async_wait([&](auto ec) { scan_arp_table(); });
 }
 
-void start(int dev_id) {
-  async_read_arp(dev_id, default_handler);
-  // start the ARP table keeper
-
-  auto &timer = core::get().arp_table_timer;
-  timer.expires_from_now(boost::posix_time::seconds(1));
-  timer.async_wait([&](auto ec) { scan_arp_table(); });
-}
+void start(int dev_id) { async_read_arp(dev_id, default_handler); }
 
 void async_read_arp(int dev_id, read_handler_t &&handler) {
   boost::asio::post(core::get().read_handlers_strand, [=]() {

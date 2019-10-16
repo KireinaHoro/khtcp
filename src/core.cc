@@ -273,6 +273,12 @@ void new_client_handler(const boost::system::error_code &ec,
 int core::run() {
   srand((unsigned)time(nullptr));
   acceptor.async_accept(new_client_handler);
+
+  // start the ARP table keeper
+  auto &timer = get().arp_table_timer;
+  timer.expires_from_now(boost::posix_time::seconds(1));
+  timer.async_wait([&](auto ec) { arp::scan_arp_table(); });
+
   ip::start();
 
   io_context.run();
