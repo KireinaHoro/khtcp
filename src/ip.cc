@@ -173,13 +173,35 @@ void async_write_ip(const addr_t src, const addr_t dst, uint8_t proto,
   boost::asio::post(core::get().write_tasks_strand, [=]() {
     core::get().write_tasks.emplace_back(
         [=]() {
+          if (client_id != 0) {
+            // enforce src to be local IP if request from client
+            bool is_local = false;
+            for (const auto &dev : core::get().devices) {
+              for (const auto &ip : dev->ip_addrs) {
+                BOOST_LOG_TRIVIAL(trace)
+                    << "Checking local address " << util::ip_to_string(ip);
+                if (!memcmp(ip, src, sizeof(addr_t))) {
+                  is_local = true;
+                }
+              }
+            }
+            if (!is_local) {
+              BOOST_LOG_TRIVIAL(error)
+                  << "Client " << client_id << " tried to send from "
+                  << util::ip_to_string(src)
+                  << ", which is not a local address";
+              handler(EINVAL);
+              return;
+            }
+          }
+
           BOOST_LOG_TRIVIAL(trace)
               << "Sending IP packet with payload length " << payload_len;
 
           if (option) {
             BOOST_LOG_TRIVIAL(error)
                 << "Requested to send non-null option IP packet";
-            handler(-1);
+            handler(EINVAL);
             return;
           }
 
