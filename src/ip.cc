@@ -233,14 +233,13 @@ void async_write_ip(const addr_t src, const addr_t dst, uint8_t proto,
 }
 
 bool route::operator<(const struct route &a) const {
-  if (metric < a.metric) {
+  if (prefix > a.prefix) {
     return true;
-  } else if (metric == a.metric) {
-    if (prefix < a.prefix) {
+  } else if (prefix == a.prefix) {
+    if (metric < a.metric) {
       return true;
-    } else if (prefix == a.prefix) {
-      int ret = memcmp(dst, a.dst, sizeof(addr_t));
-      return ret;
+    } else if (metric == a.metric) {
+      return memcmp(dst, a.dst, sizeof(addr_t));
     } else {
       return false;
     }
@@ -254,8 +253,10 @@ boost::container::flat_set<struct route> routing_table;
 void add_route(struct route &&route) { routing_table.emplace(route); }
 
 bool lookup_route(const addr_t dst, const struct route **out_route) {
+  uint32_t addr = *(uint32_t *)dst;
   for (const auto &r : routing_table) {
-    if (!memcmp(r.dst, dst, r.prefix / 8)) {
+    uint32_t route_dst = *(uint32_t *)r.dst;
+    if (addr >> (32 - r.prefix) == route_dst >> (32 - r.prefix)) {
       *out_route = &r;
       return true;
     }
