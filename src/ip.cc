@@ -104,8 +104,7 @@ device::read_handler_t::first_type wrap_read_handler(int16_t proto,
       uint16_t hdr_len = hdr_ptr->ihl * sizeof(uint32_t);
       if (hdr_len != 20) {
         BOOST_LOG_TRIVIAL(warning)
-            << "Dropping IP packet with unsupported header length " << hdr_len;
-        return false;
+            << "Ignoring IP packet options; total header length: " << hdr_len;
       }
       auto option_ptr = ((const uint8_t *)packet_ptr) + sizeof(ip_header_t);
       auto payload_ptr = ((const uint8_t *)packet_ptr) + hdr_len;
