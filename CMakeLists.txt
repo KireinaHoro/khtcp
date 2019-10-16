@@ -15,7 +15,7 @@ foreach(util IN LISTS cmake_utils)
     include(${util})
 endforeach(util IN LISTS cmake_utils)
 
-find_package(Boost 1.69.0 EXACT REQUIRED COMPONENTS log)
+find_package(Boost 1.69.0 REQUIRED COMPONENTS log)
 include_directories("include/" ${Boost_INCLUDE_DIRS} ${PCAP_INCLUDE_DIRS})
 link_libraries(${Boost_LIBRARIES} ${PCAP_LIBRARIES})
 add_definitions(-DBOOST_LOG_DYN_LINK)
