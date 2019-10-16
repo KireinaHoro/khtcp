@@ -6,10 +6,65 @@
 
 #include <boost/container/flat_set.hpp>
 #include <boost/endian/conversion.hpp>
+#include <iomanip>
 #include <iostream>
 
 namespace khtcp {
 namespace ip {
+
+uint16_t ip_checksum(const void *vdata, size_t length) {
+  // Cast the data pointer to one that can be indexed.
+  char *data = (char *)vdata;
+
+  // Initialise the accumulator.
+  uint64_t acc = 0xffff;
+
+  // Handle any partial block at the start of the data.
+  unsigned int offset = ((uintptr_t)data) & 3;
+  if (offset) {
+    size_t count = 4 - offset;
+    if (count > length)
+      count = length;
+    uint32_t word = 0;
+    memcpy(offset + (char *)&word, data, count);
+    acc += ntohl(word);
+    data += count;
+    length -= count;
+  }
+
+  // Handle any complete 32-bit blocks.
+  char *data_end = data + (length & ~3);
+  while (data != data_end) {
+    uint32_t word;
+    memcpy(&word, data, 4);
+    acc += ntohl(word);
+    data += 4;
+  }
+  length &= 3;
+
+  // Handle any partial block at the end of the data.
+  if (length) {
+    uint32_t word = 0;
+    memcpy(&word, data, length);
+    acc += ntohl(word);
+  }
+
+  // Handle deferred carries.
+  acc = (acc & 0xffffffff) + (acc >> 32);
+  while (acc >> 16) {
+    acc = (acc & 0xffff) + (acc >> 16);
+  }
+
+  // If the data began at an odd byte address
+  // then reverse the byte order to compensate.
+  if (offset & 1) {
+    acc = ((acc & 0xff00) >> 8) | ((acc & 0x00ff) << 8);
+  }
+
+  // Return the checksum in network byte order.
+  return htons(~acc);
+}
+
 device::read_handler_t::first_type wrap_read_handler(int16_t proto,
                                                      read_handler_t handler) {
   return [=](int dev_id, uint16_t ethertype, const uint8_t *packet_ptr,
@@ -17,7 +72,20 @@ device::read_handler_t::first_type wrap_read_handler(int16_t proto,
     if (ethertype != ip::ethertype) {
       return false;
     }
-    auto hdr_ptr = (const ip_header_t *)packet_ptr;
+    auto hdr_ptr = (ip_header_t *)packet_ptr;
+
+    auto chksum = hdr_ptr->header_csum;
+    hdr_ptr->header_csum = 0;
+    hdr_ptr->header_csum = ip_checksum(hdr_ptr, sizeof(ip_header_t));
+
+    if (hdr_ptr->header_csum != chksum) {
+      BOOST_LOG_TRIVIAL(warning)
+          << "Dropping IP packet with incorrect header checksum: expected 0x"
+          << std::hex << std::setw(4) << std::setfill('0')
+          << hdr_ptr->header_csum << ", got 0x" << std::hex << std::setw(4)
+          << std::setfill('0') << chksum;
+      return false;
+    }
 
     BOOST_LOG_TRIVIAL(trace) << "Received IP packet on device "
                              << device::get_device_handle(dev_id).name
@@ -95,59 +163,6 @@ void async_read_ip(int proto, read_handler_t &&handler, int client_id) {
                                            client_id);
     BOOST_LOG_TRIVIAL(trace) << "IP read handler queued";
   });
-}
-
-uint16_t ip_checksum(const void *vdata, size_t length) {
-  // Cast the data pointer to one that can be indexed.
-  char *data = (char *)vdata;
-
-  // Initialise the accumulator.
-  uint64_t acc = 0xffff;
-
-  // Handle any partial block at the start of the data.
-  unsigned int offset = ((uintptr_t)data) & 3;
-  if (offset) {
-    size_t count = 4 - offset;
-    if (count > length)
-      count = length;
-    uint32_t word = 0;
-    memcpy(offset + (char *)&word, data, count);
-    acc += ntohl(word);
-    data += count;
-    length -= count;
-  }
-
-  // Handle any complete 32-bit blocks.
-  char *data_end = data + (length & ~3);
-  while (data != data_end) {
-    uint32_t word;
-    memcpy(&word, data, 4);
-    acc += ntohl(word);
-    data += 4;
-  }
-  length &= 3;
-
-  // Handle any partial block at the end of the data.
-  if (length) {
-    uint32_t word = 0;
-    memcpy(&word, data, length);
-    acc += ntohl(word);
-  }
-
-  // Handle deferred carries.
-  acc = (acc & 0xffffffff) + (acc >> 32);
-  while (acc >> 16) {
-    acc = (acc & 0xffff) + (acc >> 16);
-  }
-
-  // If the data began at an odd byte address
-  // then reverse the byte order to compensate.
-  if (offset & 1) {
-    acc = ((acc & 0xff00) >> 8) | ((acc & 0x00ff) << 8);
-  }
-
-  // Return the checksum in network byte order.
-  return htons(~acc);
 }
 
 void async_write_ip(const addr_t src, const addr_t dst, uint8_t proto,
