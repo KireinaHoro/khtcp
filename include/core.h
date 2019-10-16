@@ -20,8 +20,6 @@
 #include <memory>
 #include <unordered_map>
 
-#define SERVER_ENDPOINT "/var/run/khtcp.sock"
-
 namespace khtcp {
 namespace core {
 /**
@@ -43,11 +41,6 @@ struct core {
    * @brief Strand to prevent concurrent access to the payload handler list.
    */
   boost::asio::io_context::strand read_handlers_strand;
-
-  struct deleter {
-    deleter() { ::unlink(SERVER_ENDPOINT); }
-    ~deleter() { ::unlink(SERVER_ENDPOINT); }
-  } deleter_;
 
   boost::asio::local::stream_protocol::acceptor acceptor;
 

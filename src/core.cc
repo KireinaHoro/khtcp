@@ -13,9 +13,11 @@ static core _core;
 
 void signal_handler(int sig) { get().io_context.stop(); }
 
+using namespace std::string_literals;
+
 core::core()
-    : acceptor(io_context,
-               boost::asio::local::stream_protocol::endpoint(SERVER_ENDPOINT)),
+    : acceptor(io_context, boost::asio::local::stream_protocol::endpoint(
+                               "\0khtcp-server"s)),
       arp_table_timer(io_context), read_handlers_strand(io_context) {
   std::signal(SIGTERM, signal_handler);
   std::signal(SIGINT, signal_handler);
