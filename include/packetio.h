@@ -156,6 +156,16 @@ int print_eth_frame_callback(const void *frame, int len, int dev_id);
  */
 int ethertype_broker_callback(const void *frame, int len, int dev_id);
 
+/**
+ * @brief Join Ethernet multicast group.
+ *
+ * Joining a multicast group will result in receiving all frames sent to this
+ * multicast address.
+ *
+ * @param multicast The multicast group to join.
+ */
+void join_multicast(const addr_t multicast);
+
 } // namespace eth
 } // namespace khtcp
 

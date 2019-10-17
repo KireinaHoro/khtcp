@@ -12,6 +12,33 @@
 namespace khtcp {
 namespace ip {
 
+struct ip_holder {
+  addr_t data;
+};
+
+std::vector<ip_holder> multicasts;
+
+uint8_t *map_ip_multicast_to_eth(const addr_t ip) {
+
+  auto eth_mult = (uint8_t *)malloc(sizeof(eth::addr_t));
+  memset(eth_mult, 0, sizeof(eth::addr_t));
+  eth_mult[0] = 0x01;
+  (*(uint32_t *)&eth_mult[2]) = boost::endian::endian_reverse(
+      0x5e000000 | (boost::endian::endian_reverse(*(uint32_t *)ip) & 0x7fffff));
+  return eth_mult;
+}
+
+void join_multicast(const addr_t multicast) {
+  BOOST_LOG_TRIVIAL(warning)
+      << "Joining IP multicast group " << util::ip_to_string(multicast);
+  multicasts.emplace_back();
+  memcpy(multicasts[multicasts.size() - 1].data, multicast, sizeof(addr_t));
+
+  auto eth_mult = map_ip_multicast_to_eth(multicast);
+  eth::join_multicast(eth_mult);
+  free(eth_mult);
+}
+
 uint16_t ip_checksum(const void *vdata, size_t length) {
   // Cast the data pointer to one that can be indexed.
   char *data = (char *)vdata;
@@ -91,6 +118,7 @@ device::read_handler_t::first_type wrap_read_handler(int16_t proto,
                              << device::get_device_handle(dev_id).name
                              << " with proto " << (int)hdr_ptr->proto;
     auto unicast = false;
+    auto multicast = false;
     auto self_sent = false;
     for (const auto &dev : core::get().devices) {
       for (const auto &ip : dev->ip_addrs) {
@@ -98,6 +126,15 @@ device::read_handler_t::first_type wrap_read_handler(int16_t proto,
             << "Checking local address " << util::ip_to_string(ip);
         unicast = unicast || !memcmp(ip, hdr_ptr->dst_addr, sizeof(addr_t));
         self_sent = self_sent || !memcmp(ip, hdr_ptr->src_addr, sizeof(addr_t));
+      }
+    }
+    for (const auto &m : multicasts) {
+      multicast =
+          multicast || !memcmp(hdr_ptr->dst_addr, m.data, sizeof(addr_t));
+      if (multicast) {
+        BOOST_LOG_TRIVIAL(warning) << "Received packet to multicast group "
+                                   << util::ip_to_string(m.data);
+        break;
       }
     }
     if (proto < 0 || hdr_ptr->proto == proto) {
@@ -110,7 +147,7 @@ device::read_handler_t::first_type wrap_read_handler(int16_t proto,
       auto payload_ptr = ((const uint8_t *)packet_ptr) + hdr_len;
       auto payload_len =
           boost::endian::endian_reverse(hdr_ptr->total_length) - hdr_len;
-      if (unicast) {
+      if (unicast || multicast) {
         return handler(payload_ptr, payload_len, hdr_ptr->src_addr,
                        hdr_ptr->dst_addr, hdr_ptr->dscp, option_ptr);
       } else if (self_sent) {
@@ -258,6 +295,16 @@ void async_write_ip(const addr_t src, const addr_t dst, uint8_t proto,
                                              << (32 - route->prefix);
             is_broadcast = (iform | subnet_mask) == 0xffffffff;
           }
+          bool is_multicast = false;
+          if (!is_broadcast) {
+            for (const auto &m : multicasts) {
+              is_multicast =
+                  is_multicast || !memcmp(dst, m.data, sizeof(addr_t));
+              if (is_multicast) {
+                break;
+              }
+            }
+          }
 
           auto packet_len = sizeof(ip_header_t) + payload_len;
           auto packet_ptr = new uint8_t[packet_len];
@@ -281,22 +328,38 @@ void async_write_ip(const addr_t src, const addr_t dst, uint8_t proto,
 
           memcpy(packet_payload, payload_ptr, payload_len);
 
-          if (is_broadcast) {
+          if (is_broadcast || is_multicast) {
             if (is_local) {
-              eth::async_write_frame(
-                  packet_ptr, packet_len, ip::ethertype, eth::ETH_BROADCAST,
-                  dev_id, [=](int ret) {
-                    if (ret) {
-                      BOOST_LOG_TRIVIAL(error)
-                          << "Failed to write IP packet: Errno " << ret;
-                    }
-                    handler(ret);
-                    delete[] packet_ptr;
-                  });
+              if (is_broadcast) {
+                eth::async_write_frame(
+                    packet_ptr, packet_len, ip::ethertype, eth::ETH_BROADCAST,
+                    dev_id, [=](int ret) {
+                      if (ret) {
+                        BOOST_LOG_TRIVIAL(error)
+                            << "Failed to write IP packet: Errno " << ret;
+                      }
+                      handler(ret);
+                      delete[] packet_ptr;
+                    });
+              } else {
+                auto multi_dst = map_ip_multicast_to_eth(dst);
+                eth::async_write_frame(
+                    packet_ptr, packet_len, ip::ethertype, multi_dst, dev_id,
+                    [=](int ret) {
+                      if (ret) {
+                        BOOST_LOG_TRIVIAL(error)
+                            << "Failed to write IP packet: Errno " << ret;
+                      }
+                      handler(ret);
+                      delete[] packet_ptr;
+                      free(multi_dst);
+                    });
+              }
             } else {
               BOOST_LOG_TRIVIAL(trace)
-                  << "Non-local IP broadcast to " << util::ip_to_string(dst)
-                  << " not repeated";
+                  << "Non-local IP "
+                  << (is_multicast ? "multicast" : "broadcast") << " to "
+                  << util::ip_to_string(dst) << " not repeated";
               handler(ECANCELED);
               delete[] packet_ptr;
             }

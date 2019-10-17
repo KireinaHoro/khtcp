@@ -7,12 +7,8 @@
 
 namespace khtcp {
 namespace arp {
-
-struct eth_holder {
-  eth::addr_t data;
-};
 // IP -> <MAC, timeout>
-std::map<uint32_t, std::pair<eth_holder, int>> neighbor_map;
+std::map<uint32_t, std::pair<device::eth_holder, int>> neighbor_map;
 
 device::read_handler_t::first_type wrap_read_handler(int dev_id_,
                                                      read_handler_t handler) {

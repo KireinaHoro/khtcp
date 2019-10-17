@@ -26,6 +26,10 @@
 namespace khtcp {
 namespace device {
 
+struct eth_holder {
+  eth::addr_t data;
+};
+
 /**
  * @brief The read handler type.
  *

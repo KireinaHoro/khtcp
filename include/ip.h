@@ -146,6 +146,16 @@ bool lookup_route(const addr_t dst, const struct route **out_route);
  */
 void print_route();
 
+/**
+ * @brief Join IP multicast group.
+ *
+ * Joining a multicast group will result in receiving all packets sent to this
+ * multicast address.
+ *
+ * @param multicast The multicast group to join.
+ */
+void join_multicast(const addr_t multicast);
+
 } // namespace ip
 } // namespace khtcp
 
