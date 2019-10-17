@@ -18,7 +18,6 @@
 
 #include <boost/asio.hpp>
 #include <map>
-#include <memory>
 #include <unordered_map>
 
 #define CLEANUP_BUF(resp, req)                                                 \
@@ -77,9 +76,7 @@ struct core {
 
   boost::asio::local::stream_protocol::acceptor acceptor;
 
-  std::unordered_map<
-      int,
-      std::pair<std::unique_ptr<boost::asio::local::stream_protocol::socket>,
+  std::unordered_map<int, std::pair<boost::asio::local::stream_protocol::socket,
                 struct request *>>
       clients;
 

@@ -1,6 +1,5 @@
 #include <boost/bind.hpp>
 #include <csignal>
-#include <memory>
 
 #include "arp.h"
 #include "core.h"
@@ -31,7 +30,7 @@ void client_request_handler(const boost::system::error_code &ec,
                             int bytes_transferred, int client_id) try {
   if (!ec) {
     auto &client = get().clients.at(client_id);
-    auto &sock = *client.first;
+    auto &sock = client.first;
     auto &req = client.second;
     struct response *resp = (struct response *)malloc(sizeof(struct response));
     get().outstanding_buffers.emplace(client_id, resp);
@@ -245,7 +244,7 @@ void client_request_handler(const boost::system::error_code &ec,
     client.second = (struct request *)malloc(sizeof(struct request));
     get().outstanding_buffers.emplace(client_id, client.second);
     boost::asio::async_read(
-        *client.first,
+        client.first,
         boost::asio::buffer(client.second, sizeof(struct request)),
         boost::bind(client_request_handler, boost::asio::placeholders::error,
                     boost::asio::placeholders::bytes_transferred, client_id));
@@ -274,15 +273,15 @@ void new_client_handler(const boost::system::error_code &ec,
   }
 
   BOOST_LOG_TRIVIAL(info) << "Accpeted new client with id " << id;
-  get().clients[id].first =
-      std::make_unique<boost::asio::local::stream_protocol::socket>(
-          std::move(sock));
+  get().clients.emplace(std::piecewise_construct, std::forward_as_tuple(id),
+                        std::forward_as_tuple(std::move(sock), nullptr));
 
-  auto &client = get().clients[id];
+  auto &client = get().clients.at(id);
   client.second = (struct request *)malloc(sizeof(struct request));
+  get().outstanding_buffers.emplace(id, client.second);
   // start reading of the client
   boost::asio::async_read(
-      *client.first, boost::asio::buffer(client.second, sizeof(struct request)),
+      client.first, boost::asio::buffer(client.second, sizeof(struct request)),
       boost::bind(client_request_handler, boost::asio::placeholders::error,
                   boost::asio::placeholders::bytes_transferred, id));
 
@@ -319,6 +318,7 @@ void cleanup_client(int client_id) {
     get().outstanding_buffers.erase(bit);
     bit = get().outstanding_buffers.find(client_id);
   }
+  get().clients.erase(client_id);
 }
 
 int core::run() {
