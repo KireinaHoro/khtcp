@@ -5,6 +5,7 @@
 #include "arp.h"
 #include "core.h"
 #include "packetio.h"
+#include "rip.h"
 #include "util.h"
 
 namespace khtcp {
@@ -352,6 +353,9 @@ int core::run() {
   timer.async_wait([&](auto ec) { arp::scan_arp_table(); });
 
   ip::start();
+
+  // Join RIPv2 multicast group
+  ip::join_multicast(rip::RIP_MULTICAST);
 
   io_context.run();
   // should never reach here
