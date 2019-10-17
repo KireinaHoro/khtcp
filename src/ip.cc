@@ -132,8 +132,8 @@ device::read_handler_t::first_type wrap_read_handler(int16_t proto,
       multicast =
           multicast || !memcmp(hdr_ptr->dst_addr, m.data, sizeof(addr_t));
       if (multicast) {
-        BOOST_LOG_TRIVIAL(warning) << "Received packet to multicast group "
-                                   << util::ip_to_string(m.data);
+        BOOST_LOG_TRIVIAL(trace) << "Received packet to multicast group "
+                                 << util::ip_to_string(m.data);
         break;
       }
     }
