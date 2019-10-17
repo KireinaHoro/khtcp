@@ -1,10 +1,13 @@
 #include <boost/bind.hpp>
 #include <csignal>
+#include <iomanip>
+#include <iostream>
 
 #include "arp.h"
 #include "core.h"
 #include "packetio.h"
 #include "rip.h"
+#include "udp.h"
 #include "util.h"
 
 namespace khtcp {
@@ -233,6 +236,168 @@ void client_request_handler(const boost::system::error_code &ec,
           client_id);
       break;
     }
+    case SOCKET: {
+      socket::socket s(client_id, req->socket.type);
+      resp->payload_len = 0;
+      if (s.type == SOCK_DGRAM) {
+        resp->socket.fd = s.fd;
+        BOOST_LOG_TRIVIAL(trace)
+            << "Opened DGRAM socket fd " << s.fd << " for client " << client_id;
+        get().client_sockets.emplace(std::piecewise_construct,
+                                     std::forward_as_tuple(client_id, s.fd),
+                                     std::forward_as_tuple(std::move(s)));
+      } else if (s.type == SOCK_STREAM) {
+        resp->socket.fd = -ENOTSUP;
+        BOOST_LOG_TRIVIAL(error)
+            << "Client " << client_id
+            << " tried to open STREAM socket, which is currently not supported";
+      } else {
+        resp->socket.fd = -EINVAL;
+        BOOST_LOG_TRIVIAL(error)
+            << "Client " << client_id << " tried to open unknown socket type "
+            << s.type;
+      }
+      boost::asio::write(sock, buf);
+      CLEANUP_BUF(resp, req)
+      break;
+    }
+    case CLOSE: {
+      resp->payload_len = 0;
+      // https://pubs.opengroup.org/onlinepubs/9699919799/functions/close.html
+      // FIXME: note that close may fail
+      resp->close.ret = 0;
+
+      get().client_sockets.erase({client_id, req->close.fd});
+      BOOST_LOG_TRIVIAL(trace) << "Closed socket fd " << req->close.fd
+                               << " for client " << client_id;
+      boost::asio::write(sock, buf);
+      CLEANUP_BUF(resp, req)
+      break;
+    }
+    case BIND: {
+      resp->payload_len = 0;
+      // https://pubs.opengroup.org/onlinepubs/9699919799/functions/bind.html
+
+      bool ok = true;
+      if (get().client_sockets.find({client_id, req->bind.fd}) ==
+          get().client_sockets.end()) {
+        BOOST_LOG_TRIVIAL(error)
+            << "Client " << client_id
+            << " tried to bind to non-existent socket fd " << req->bind.fd;
+        ok = false;
+        resp->bind.ret = ENOTSOCK;
+      }
+      for (const auto &[k, v] : get().client_sockets) {
+        if (k.first == client_id) {
+          if (v.bind_addr.sin_addr.s_addr == req->bind.addr.sin_addr.s_addr &&
+              v.bind_addr.sin_port == req->bind.addr.sin_port) {
+            BOOST_LOG_TRIVIAL(error)
+                << "Client " << client_id
+                << " tried to bind to address already in use ("
+                << util::ip_to_string((const uint8_t *)&req->bind.addr.sin_addr)
+                << ":" << req->bind.addr.sin_port << ") for socket fd "
+                << req->bind.fd;
+            ok = false;
+            resp->bind.ret = EADDRINUSE;
+          }
+        }
+      }
+      if (ok) {
+        memcpy(&get().client_sockets.at({client_id, req->bind.fd}).bind_addr,
+               &req->bind.addr, sizeof(struct sockaddr_in));
+        resp->bind.ret = 0;
+
+        BOOST_LOG_TRIVIAL(trace)
+            << "Client " << client_id << " binded "
+            << util::ip_to_string((const uint8_t *)&req->bind.addr.sin_addr)
+            << ":" << req->bind.addr.sin_port << " to socket fd "
+            << req->bind.fd;
+      }
+      boost::asio::write(sock, buf);
+      CLEANUP_BUF(resp, req)
+      break;
+    }
+    case SENDTO: {
+      void *payload_ptr = malloc(req->payload_len);
+      boost::asio::read(sock,
+                        boost::asio::buffer(payload_ptr, req->payload_len));
+
+      resp->payload_len = 0;
+      auto it = get().client_sockets.find({client_id, req->sendto.fd});
+      if (it == get().client_sockets.end() || it->second.type != SOCK_DGRAM) {
+        resp->sendto.ret = -ENOTSOCK;
+        BOOST_LOG_TRIVIAL(error)
+            << "Client " << client_id
+            << " tried to send to invalid DGRAM socket fd " << req->sendto.fd;
+        boost::asio::write(sock, buf);
+        CLEANUP_BUF(resp, req);
+        break;
+      }
+      const uint8_t *src;
+      uint16_t port;
+      it->second.get_src((const uint8_t *)&req->sendto.dst.sin_addr, &src,
+                         &port);
+      udp::async_write_udp(
+          src, port, (const uint8_t *)&req->sendto.dst.sin_addr,
+          req->sendto.dst.sin_port, payload_ptr, req->payload_len,
+          [buf, resp, req, payload_ptr, &sock](int ret) {
+            resp->sendto.ret = req->payload_len;
+            try {
+              boost::asio::write(sock, buf);
+            } catch (const std::exception &e) {
+              BOOST_LOG_TRIVIAL(error)
+                  << "Exception in client handler: " << e.what();
+            }
+            BOOST_LOG_TRIVIAL(trace) << "Sent response #" << resp->id;
+            CLEANUP_BUF(resp, req)
+            free(payload_ptr);
+          },
+          client_id);
+      break;
+    }
+    case RECVFROM: {
+      auto it = get().client_sockets.find({client_id, req->recvfrom.fd});
+      if (it == get().client_sockets.end() || it->second.type != SOCK_DGRAM) {
+        resp->recvfrom.ret = -ENOTSOCK;
+        BOOST_LOG_TRIVIAL(error)
+            << "Client " << client_id
+            << " tried to recv from invalid DGRAM socket fd " << req->sendto.fd;
+        boost::asio::write(sock, buf);
+        CLEANUP_BUF(resp, req);
+        break;
+      }
+      BOOST_LOG_TRIVIAL(trace)
+          << "Received recvfrom request from client with ID " << req->id;
+      udp::async_read_udp(
+          [it, buf, resp, req, &sock,
+           client_id](const void *payload_ptr, uint64_t payload_len,
+                      const khtcp::ip::addr_t src, uint16_t src_port,
+                      const khtcp::ip::addr_t dst, uint16_t dst_port) -> bool {
+            if (memcmp(&req->recvfrom.src.sin_addr, src, sizeof(ip::addr_t)) ||
+                src_port != req->recvfrom.src.sin_port) {
+              return false;
+            }
+            resp->payload_len = payload_len;
+            resp->recvfrom.ret = payload_len;
+
+            try {
+              boost::asio::write(sock, buf);
+              BOOST_LOG_TRIVIAL(trace)
+                  << "Sending payload with length " << payload_len;
+
+              boost::asio::write(sock,
+                                 boost::asio::buffer(payload_ptr, payload_len));
+            } catch (const std::exception &e) {
+              BOOST_LOG_TRIVIAL(error)
+                  << "Exception in client handler: " << e.what();
+            }
+            BOOST_LOG_TRIVIAL(trace) << "Sent response #" << resp->id;
+            CLEANUP_BUF(resp, req)
+            return true;
+          },
+          client_id);
+      break;
+    }
     default:
       BOOST_LOG_TRIVIAL(warning)
           << "Unknown request " << req->type << " from client " << client_id;
@@ -319,6 +484,14 @@ void cleanup_client(int client_id) {
     bit = get().outstanding_buffers.find(client_id);
   }
   get().clients.erase(client_id);
+
+  // close all client sockets
+  auto sit = get().client_sockets.begin();
+  while (sit != get().client_sockets.end()) {
+    if (sit->first.first == client_id) {
+      get().client_sockets.erase(sit++);
+    }
+  }
 }
 
 int core::run() {

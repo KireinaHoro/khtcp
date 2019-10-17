@@ -15,8 +15,10 @@
 #include "client_request.h"
 #include "device.h"
 #include "packetio.h"
+#include "socket.h"
 
 #include <boost/asio.hpp>
+#include <boost/functional/hash.hpp>
 #include <map>
 #include <unordered_map>
 
@@ -77,8 +79,18 @@ struct core {
   boost::asio::local::stream_protocol::acceptor acceptor;
 
   std::unordered_map<int, std::pair<boost::asio::local::stream_protocol::socket,
-                struct request *>>
+                                    struct request *>>
       clients;
+
+  /**
+   * @brief Records current fd using flags.
+   *
+   * <client, fd> -> socket::socket
+   */
+  std::unordered_map<std::pair<int, int>, socket::socket,
+                     boost::hash<std::pair<int, int>>>
+      client_sockets;
+  const static int MIN_FD = 400000; // to avoid clashing with normal file fds
 
   boost::asio::deadline_timer arp_table_timer;
 
