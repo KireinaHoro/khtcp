@@ -105,7 +105,6 @@ struct request {
     } sendto;
     struct {
       int fd;
-      struct sockaddr_in src;
     } recvfrom;
   };
 };
@@ -168,6 +167,7 @@ struct response {
     } sendto;
     struct {
       ssize_t ret;
+      struct sockaddr_in src;
     } recvfrom;
   };
 };

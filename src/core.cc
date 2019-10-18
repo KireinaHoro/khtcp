@@ -373,12 +373,17 @@ void client_request_handler(const boost::system::error_code &ec,
            client_id](const void *payload_ptr, uint64_t payload_len,
                       const khtcp::ip::addr_t src, uint16_t src_port,
                       const khtcp::ip::addr_t dst, uint16_t dst_port) -> bool {
-            if (memcmp(&req->recvfrom.src.sin_addr, src, sizeof(ip::addr_t)) ||
-                src_port != req->recvfrom.src.sin_port) {
+            if (it->second.bind_addr.sin_family == AF_INET &&
+                (memcmp(&it->second.bind_addr.sin_addr, src,
+                        sizeof(ip::addr_t)) ||
+                 src_port != it->second.bind_addr.sin_port)) {
               return false;
             }
             resp->payload_len = payload_len;
             resp->recvfrom.ret = payload_len;
+            resp->recvfrom.src.sin_family = AF_INET;
+            memcpy(&resp->recvfrom.src.sin_addr, src, sizeof(ip::addr_t));
+            resp->recvfrom.src.sin_port = src_port;
 
             try {
               boost::asio::write(sock, buf);
