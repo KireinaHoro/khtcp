@@ -260,33 +260,13 @@ void async_write_ip(const addr_t src, const addr_t dst, uint8_t proto,
             handler(EHOSTUNREACH);
             return;
           }
-          if (route->type != route::DEV && route->type != route::VIA) {
-            BOOST_LOG_TRIVIAL(error) << "Unknown route type " << route->type;
-            handler(EINVAL);
-            return;
-          }
 
-          bool nonlocal_route = false;
-          const uint8_t *resolv_mac_ip = dst;
-          while (route->type != route::DEV) {
-            nonlocal_route = true;
-            // lookup gateway address in routing table
-            resolv_mac_ip = route->nexthop.ip;
-            got_route = lookup_route(resolv_mac_ip, &route);
-            if (!got_route) {
-              BOOST_LOG_TRIVIAL(warning) << "No route to gateway "
-                                         << util::ip_to_string(resolv_mac_ip);
-              // TODO: send ICMP Destination Unreachable Message
-              // back to src
-              handler(EHOSTUNREACH);
-              return;
-            }
-          }
-          // we have a DEV route now
-          auto dev_id = route->nexthop.dev_id;
+          const uint8_t *resolv_mac_ip =
+              route->has_router ? route->router : dst;
+          auto dev_id = route->dev_id;
 
           bool is_broadcast = false;
-          if (!nonlocal_route) {
+          if (!route->has_router) {
             // check if is broadcast address
             uint32_t iform = boost::endian::endian_reverse(*(uint32_t *)dst);
             uint32_t subnet_mask = route->prefix == 0
@@ -410,7 +390,27 @@ bool route::operator<(const struct route &a) const {
 
 boost::container::flat_set<struct route> routing_table;
 
-void add_route(struct route &&route) { routing_table.emplace(route); }
+bool add_route(struct route &&route) {
+  if (route.has_router) {
+    const struct route *router_route;
+    if (!lookup_route(route.router, &router_route)) {
+      BOOST_LOG_TRIVIAL(error) << "Tried to add route with invalid router "
+                               << util::ip_to_string(route.router);
+      return false;
+    }
+    if (route.dev_id < 0) {
+      // fill in device
+      route.dev_id = router_route->dev_id;
+    }
+  }
+  if (route.dev_id < 0) {
+    BOOST_LOG_TRIVIAL(error)
+        << "Tried to add route with invalid out device id " << route.dev_id;
+    return false;
+  }
+  routing_table.emplace(route);
+  return true;
+}
 
 bool lookup_route(const addr_t dst, const struct route **out_route) {
   uint32_t addr = boost::endian::endian_reverse(*(uint32_t *)dst);
@@ -427,11 +427,10 @@ bool lookup_route(const addr_t dst, const struct route **out_route) {
 void print_route() {
   for (const auto &r : routing_table) {
     std::cout << util::ip_to_string(r.dst) << "/" << (int)r.prefix << " ";
-    if (r.type == route::DEV) {
-      std::cout << "dev " << device::get_device_handle(r.nexthop.dev_id).name;
-    } else if (r.type == route::VIA) {
-      std::cout << "via " << util::ip_to_string(r.nexthop.ip);
+    if (r.has_router) {
+      std::cout << "via " << util::ip_to_string(r.router) << " ";
     }
+    std::cout << "dev " << device::get_device_handle(r.dev_id).name;
     std::cout << " metric " << r.metric << std::endl;
   }
 }

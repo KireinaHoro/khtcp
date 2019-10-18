@@ -34,26 +34,10 @@ void socket::get_src(const ip::addr_t dst, const uint8_t **src_out,
       *src_out = nullptr;
       return;
     }
-    if (route->type != ip::route::DEV && route->type != ip::route::VIA) {
-      BOOST_LOG_TRIVIAL(error) << "Unknown route type " << route->type;
-      *src_out = nullptr;
-      return;
-    }
 
-    const uint8_t *resolv_mac_ip = dst;
-    while (route->type != ip::route::DEV) {
-      // lookup gateway address in routing table
-      resolv_mac_ip = route->nexthop.ip;
-      if (!lookup_route(resolv_mac_ip, &route)) {
-        BOOST_LOG_TRIVIAL(warning)
-            << "No route to gateway " << util::ip_to_string(resolv_mac_ip);
-        *src_out = nullptr;
-        return;
-      }
-    }
     // take the first address and a random, > 1024 port
     // Ephemeral port definition according to RFC6056
-    *src_out = device::get_device_handle(route->nexthop.dev_id).ip_addrs[0];
+    *src_out = device::get_device_handle(route->dev_id).ip_addrs[0];
     *port_out = rand() % 65535;
     if (*port_out <= 1024) {
       *port_out = 65535 - *port_out;

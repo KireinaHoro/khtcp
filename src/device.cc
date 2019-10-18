@@ -142,8 +142,7 @@ int add_device(const char *device) {
 
           // add route for subnet
           ip::route r;
-          r.type = ip::route::DEV;
-          r.nexthop.dev_id = dev_id;
+          r.dev_id = dev_id;
           r.metric = 10; // 10 for local
           r.prefix =
               util::mask_to_cidr((const struct sockaddr_in *)ifa->ifa_netmask);

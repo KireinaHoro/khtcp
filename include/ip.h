@@ -112,11 +112,9 @@ void start();
  * entry.
  */
 struct route {
-  enum type { DEV, VIA } type;
-  union {
-    int dev_id;
-    addr_t ip;
-  } nexthop;
+  int dev_id = -1;
+  bool has_router = false;
+  addr_t router;
   addr_t dst;
   uint8_t prefix;
   uint64_t metric;
@@ -128,8 +126,10 @@ struct route {
  * @brief Add a route to the global routing table.
  *
  * @param route the route object to add
+ * @return true the add succeeded
+ * @return false the add failed
  */
-void add_route(struct route &&route);
+bool add_route(struct route &&route);
 
 /**
  * @brief Lookup a destination in the global routing table.
