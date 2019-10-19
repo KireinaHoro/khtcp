@@ -499,6 +499,11 @@ void cleanup_client(int client_id) {
   }
 }
 
+
+void record_multicast_buffer(void *buf) {
+  get().multicast_buffers[buf] = get().devices.size();
+}
+
 int core::run() {
   srand((unsigned)time(nullptr));
   acceptor.async_accept(new_client_handler);

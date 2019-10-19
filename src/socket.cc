@@ -26,7 +26,7 @@ void socket::get_src(const ip::addr_t dst, const uint8_t **src_out,
     *src_out = (const uint8_t *)&bind_addr.sin_addr;
     *port_out = bind_addr.sin_port;
   } else {
-    const struct ip::route *route;
+    struct ip::route *route;
     if (!ip::lookup_route(dst, &route)) {
       // failed to get route for destination
       BOOST_LOG_TRIVIAL(warning)

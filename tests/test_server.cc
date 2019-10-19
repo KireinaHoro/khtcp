@@ -42,15 +42,12 @@ int main(int argc, char **argv) {
     r.prefix = 0;
     r.has_router = true;
     khtcp::util::string_to_ip(argv[1], r.router);
-    r.metric = 100;
+    r.age = -1; // never expires
     if (!khtcp::ip::add_route(std::move(r))) {
       std::cerr << "Failed to add default route" << std::endl;
       return -1;
     }
   }
-
-  std::cout << "Global Routing Table" << std::endl;
-  khtcp::ip::print_route();
 
   return khtcp::core::get().run();
 }

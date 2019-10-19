@@ -94,6 +94,8 @@ struct core {
 
   boost::asio::deadline_timer arp_table_timer;
 
+  std::unordered_map<void *, uint32_t> multicast_buffers;
+
   core();
 
   /**
@@ -101,6 +103,8 @@ struct core {
    */
   int run();
 };
+
+void record_multicast_buffer(void *buf);
 
 /**
  * @brief Returns the global core object reference.

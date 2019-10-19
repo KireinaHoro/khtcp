@@ -14,6 +14,7 @@
 
 #include <cstdint>
 #include <functional>
+#include <list>
 #include <string>
 
 namespace khtcp {
@@ -117,10 +118,19 @@ struct route {
   addr_t router;
   addr_t dst;
   uint8_t prefix;
-  uint64_t metric;
+  uint32_t metric = 1;
+  int age = 0;
+  bool changed = false;
 
   bool operator<(const struct route &a) const;
 };
+
+/**
+ * @brief Get the routing table object
+ *
+ * @return std::set<struct route>&
+ */
+std::list<struct route> &get_routing_table();
 
 /**
  * @brief Add a route to the global routing table.
@@ -136,15 +146,31 @@ bool add_route(struct route &&route);
  *
  * @param dst destination
  * @param out_route pointer to the route entry
+ * @param prefix if not equal to -1, only route with that prefix length will
+ * match
  * @return true a valid route has been found
  * @return false otherwise
  */
-bool lookup_route(const addr_t dst, const struct route **out_route);
+bool lookup_route(const addr_t dst, struct route **out_route, int prefix = -1);
 
 /**
  * @brief Print the routing table.
  */
 void print_route();
+
+/**
+ * @brief Age all routes by 1.
+ */
+void update_route();
+
+/**
+ * @brief Delete specified route.
+ *
+ * @param route
+ * @return true route found and deleted.
+ * @return false route not found.
+ */
+bool delete_route(const struct route *route);
 
 /**
  * @brief Join IP multicast group.
@@ -155,6 +181,9 @@ void print_route();
  * @param multicast The multicast group to join.
  */
 void join_multicast(const addr_t multicast);
+
+void test_multicast_broadcast(const ip::addr_t dst, route **r,
+                              bool *is_multicast, bool *is_broadcast);
 
 } // namespace ip
 } // namespace khtcp

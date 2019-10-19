@@ -38,6 +38,10 @@ void async_write_udp(const ip::addr_t src, uint16_t src_port,
               << "Sending UDP packet with payload length " << payload_len;
           auto packet_len = sizeof(udp_header_t) + payload_len;
           auto packet_ptr = new uint8_t[packet_len];
+
+          if (!src) {
+            core::record_multicast_buffer(packet_ptr);
+          }
           auto hdr = (udp_header_t *)packet_ptr;
           auto packet_payload = ((uint8_t *)packet_ptr) + sizeof(udp_header_t);
           hdr->src_port = boost::endian::endian_reverse(src_port);
@@ -55,12 +59,17 @@ void async_write_udp(const ip::addr_t src, uint16_t src_port,
                       << "Failed to write UDP packet: Errno " << ret;
                 }
                 handler(ret);
-                delete[] packet_ptr;
+                if (!src && !--core::get().multicast_buffers.at(packet_ptr)) {
+                  core::get().multicast_buffers.erase(packet_ptr);
+                  delete[] packet_ptr;
+                } else if (src) {
+                  delete[] packet_ptr;
+                }
               },
               client_id);
         },
         client_id);
   });
-}
+} // namespace udp
 } // namespace udp
 } // namespace khtcp

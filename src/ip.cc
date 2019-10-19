@@ -2,12 +2,13 @@
 #include "arp.h"
 #include "core.h"
 #include "device.h"
+#include "rip.h"
 #include "util.h"
 
-#include <boost/container/flat_set.hpp>
 #include <boost/endian/conversion.hpp>
 #include <iomanip>
 #include <iostream>
+#include <list>
 
 namespace khtcp {
 namespace ip {
@@ -29,8 +30,8 @@ uint8_t *map_ip_multicast_to_eth(const addr_t ip) {
 }
 
 void join_multicast(const addr_t multicast) {
-  BOOST_LOG_TRIVIAL(warning)
-      << "Joining IP multicast group " << util::ip_to_string(multicast);
+  BOOST_LOG_TRIVIAL(info) << "Joining IP multicast group "
+                          << util::ip_to_string(multicast);
   multicasts.emplace_back();
   memcpy(multicasts[multicasts.size() - 1].data, multicast, sizeof(addr_t));
 
@@ -209,6 +210,39 @@ void async_read_ip(int proto, read_handler_t &&handler, int client_id) {
   });
 }
 
+void test_multicast_broadcast(const ip::addr_t dst, route **r,
+                              bool *is_multicast, bool *is_broadcast) {
+  // reset the input value
+  *is_multicast = false;
+  *is_broadcast = false;
+
+  route *r_;
+  route **route = r ? r : &r_;
+  bool has_route = lookup_route(dst, route);
+  if (!has_route) {
+    *r = nullptr;
+  }
+  if (has_route && !(*route)->has_router) {
+    // check if is broadcast address
+    uint32_t iform = boost::endian::endian_reverse(*(uint32_t *)dst);
+    uint32_t subnet_mask = (*route)->prefix == 0
+                               ? 0
+                               : *(uint32_t *)IP_BROADCAST
+                                     << (32 - (*route)->prefix);
+    *is_broadcast = (iform | subnet_mask) == 0xffffffff;
+  } else {
+    *is_broadcast = false;
+  }
+  if (!*is_broadcast) {
+    for (const auto &m : multicasts) {
+      *is_multicast = *is_multicast || !memcmp(dst, m.data, sizeof(addr_t));
+      if (*is_multicast) {
+        break;
+      }
+    }
+  }
+}
+
 void async_write_ip(const addr_t src, const addr_t dst, uint8_t proto,
                     uint8_t dscp, uint8_t ttl, const void *payload_ptr,
                     uint64_t payload_len, write_handler_t &&handler,
@@ -216,14 +250,18 @@ void async_write_ip(const addr_t src, const addr_t dst, uint8_t proto,
                     const void *option) {
   boost::asio::post(core::get().write_tasks_strand, [=]() {
     core::get().write_tasks.emplace_back(
-        [=]() {
+        [=]() mutable {
           bool is_local = false;
-          for (const auto &dev : core::get().devices) {
-            for (const auto &ip : dev->ip_addrs) {
-              BOOST_LOG_TRIVIAL(trace)
-                  << "Checking local address " << util::ip_to_string(ip);
-              if (!memcmp(ip, src, sizeof(addr_t))) {
-                is_local = true;
+          if (!src) {
+            is_local = true;
+          } else {
+            for (const auto &dev : core::get().devices) {
+              for (const auto &ip : dev->ip_addrs) {
+                BOOST_LOG_TRIVIAL(trace)
+                    << "Checking local address " << util::ip_to_string(ip);
+                if (!memcmp(ip, src, sizeof(addr_t))) {
+                  is_local = true;
+                }
               }
             }
           }
@@ -249,45 +287,33 @@ void async_write_ip(const addr_t src, const addr_t dst, uint8_t proto,
             return;
           }
 
-          const struct route *route;
-          auto got_route = lookup_route(dst, &route);
-          if (!got_route) {
-            // failed to get route for destination
-            BOOST_LOG_TRIVIAL(warning)
-                << "No route to host " << util::ip_to_string(dst);
-            // TODO: send ICMP Destination Unreachable Message
-            // back to src
-            handler(EHOSTUNREACH);
-            return;
-          }
+          struct route *route;
 
-          const uint8_t *resolv_mac_ip =
-              route->has_router ? route->router : dst;
-          auto dev_id = route->dev_id;
+          bool is_broadcast, is_multicast;
+          test_multicast_broadcast(dst, &route, &is_multicast, &is_broadcast);
 
-          bool is_broadcast = false;
-          if (!route->has_router) {
-            // check if is broadcast address
-            uint32_t iform = boost::endian::endian_reverse(*(uint32_t *)dst);
-            uint32_t subnet_mask = route->prefix == 0
-                                       ? 0
-                                       : *(uint32_t *)IP_BROADCAST
-                                             << (32 - route->prefix);
-            is_broadcast = (iform | subnet_mask) == 0xffffffff;
-          }
-          bool is_multicast = false;
-          if (!is_broadcast) {
-            for (const auto &m : multicasts) {
-              is_multicast =
-                  is_multicast || !memcmp(dst, m.data, sizeof(addr_t));
-              if (is_multicast) {
-                break;
-              }
+          const uint8_t *resolv_mac_ip;
+          int dev_id;
+          if (!is_broadcast && !is_multicast) {
+            if (!route || route->metric >= rip::infinity) {
+              // failed to get route for destination
+              BOOST_LOG_TRIVIAL(warning)
+                  << "No route to host " << util::ip_to_string(dst);
+              // TODO: send ICMP Destination Unreachable Message
+              // back to src
+              handler(EHOSTUNREACH);
+              return;
             }
+            resolv_mac_ip = route->has_router ? route->router : dst;
+            dev_id = route->dev_id;
           }
 
           auto packet_len = sizeof(ip_header_t) + payload_len;
-          auto packet_ptr = new uint8_t[packet_len];
+          auto packet_ptr = (uint8_t *)malloc(packet_len);
+          if (is_broadcast || is_multicast) {
+            core::record_multicast_buffer(packet_ptr);
+            ttl = 1;
+          }
           auto hdr = (ip_header_t *)packet_ptr;
           auto packet_payload = ((uint8_t *)packet_ptr) + sizeof(ip_header_t);
           hdr->version = 4;
@@ -300,7 +326,10 @@ void async_write_ip(const addr_t src, const addr_t dst, uint8_t proto,
           hdr->flags = boost::endian::endian_reverse((uint16_t)(df << 14));
           hdr->ttl = ttl;
           hdr->proto = proto;
-          memcpy(hdr->src_addr, src, sizeof(addr_t));
+
+          if (src) {
+            memcpy(hdr->src_addr, src, sizeof(addr_t));
+          }
           memcpy(hdr->dst_addr, dst, sizeof(addr_t));
 
           hdr->header_csum = 0;
@@ -308,32 +337,64 @@ void async_write_ip(const addr_t src, const addr_t dst, uint8_t proto,
 
           memcpy(packet_payload, payload_ptr, payload_len);
 
+          auto send_broadcast = [=](auto buf, auto dev_id) {
+            if (is_broadcast) {
+              eth::async_write_frame(
+                  buf, packet_len, ip::ethertype, eth::ETH_BROADCAST, dev_id,
+                  [=](int ret) {
+                    if (ret) {
+                      BOOST_LOG_TRIVIAL(error)
+                          << "Failed to write IP packet: Errno " << ret;
+                    }
+                    handler(ret);
+                    free(buf);
+                  });
+            } else {
+              auto multi_dst = map_ip_multicast_to_eth(dst);
+              eth::async_write_frame(
+                  buf, packet_len, ip::ethertype, multi_dst, dev_id,
+                  [=](int ret) {
+                    if (ret) {
+                      BOOST_LOG_TRIVIAL(error)
+                          << "Failed to write IP packet: Errno " << ret;
+                    }
+                    handler(ret);
+                    free(buf);
+                    free(multi_dst);
+                  });
+            }
+          };
+
           if (is_broadcast || is_multicast) {
             if (is_local) {
-              if (is_broadcast) {
-                eth::async_write_frame(
-                    packet_ptr, packet_len, ip::ethertype, eth::ETH_BROADCAST,
-                    dev_id, [=](int ret) {
-                      if (ret) {
-                        BOOST_LOG_TRIVIAL(error)
-                            << "Failed to write IP packet: Errno " << ret;
-                      }
-                      handler(ret);
-                      delete[] packet_ptr;
-                    });
+              if (!src) {
+                for (int i = 0; i < core::get().devices.size(); ++i) {
+                  uint8_t *dev_buf_ptr = (uint8_t *)malloc(packet_len);
+                  memcpy(dev_buf_ptr, packet_ptr, packet_len);
+
+                  auto hdr = (ip_header_t *)dev_buf_ptr;
+                  memcpy(hdr->src_addr,
+                         device::get_device_handle(i).ip_addrs[0],
+                         sizeof(addr_t));
+                  BOOST_LOG_TRIVIAL(trace)
+                      << "Setting broadcast/multicast src to "
+                      << util::ip_to_string(hdr->src_addr) << " for device"
+                      << device::get_device_handle(i).name;
+                  hdr->header_csum = 0;
+                  hdr->header_csum = ip_checksum(hdr, sizeof(ip_header_t));
+                  send_broadcast(dev_buf_ptr, i);
+                }
+                free(packet_ptr);
               } else {
-                auto multi_dst = map_ip_multicast_to_eth(dst);
-                eth::async_write_frame(
-                    packet_ptr, packet_len, ip::ethertype, multi_dst, dev_id,
-                    [=](int ret) {
-                      if (ret) {
-                        BOOST_LOG_TRIVIAL(error)
-                            << "Failed to write IP packet: Errno " << ret;
-                      }
-                      handler(ret);
-                      delete[] packet_ptr;
-                      free(multi_dst);
-                    });
+                int dev_id;
+                for (int i = 0; i < core::get().devices.size(); ++i) {
+                  for (const auto &ip : device::get_device_handle(i).ip_addrs) {
+                    if (!memcmp(src, ip, sizeof(ip::addr_t))) {
+                      dev_id = i;
+                    }
+                  }
+                }
+                send_broadcast(packet_ptr, dev_id);
               }
             } else {
               BOOST_LOG_TRIVIAL(trace)
@@ -341,7 +402,7 @@ void async_write_ip(const addr_t src, const addr_t dst, uint8_t proto,
                   << (is_multicast ? "multicast" : "broadcast") << " to "
                   << util::ip_to_string(dst) << " not repeated";
               handler(ECANCELED);
-              delete[] packet_ptr;
+              free(packet_ptr);
             }
           } else {
             auto mac_handler = [packet_ptr, packet_len, dev_id, resolv_mac_ip,
@@ -351,7 +412,7 @@ void async_write_ip(const addr_t src, const addr_t dst, uint8_t proto,
                     << "Failed to resolve MAC for "
                     << util::ip_to_string(resolv_mac_ip) << ": Errno " << ret;
                 handler(ret);
-                delete[] packet_ptr;
+                free(packet_ptr);
               } else {
                 eth::async_write_frame(
                     packet_ptr, packet_len, ip::ethertype, addr, dev_id,
@@ -361,7 +422,7 @@ void async_write_ip(const addr_t src, const addr_t dst, uint8_t proto,
                             << "Failed to write IP packet: Errno " << ret;
                       }
                       handler(ret);
-                      delete[] packet_ptr;
+                      free(packet_ptr);
                     });
               }
             };
@@ -388,11 +449,13 @@ bool route::operator<(const struct route &a) const {
   }
 }
 
-boost::container::flat_set<struct route> routing_table;
+std::list<struct route> routing_table;
+
+std::list<struct route> &get_routing_table() { return routing_table; }
 
 bool add_route(struct route &&route) {
   if (route.has_router) {
-    const struct route *router_route;
+    struct route *router_route;
     if (!lookup_route(route.router, &router_route)) {
       BOOST_LOG_TRIVIAL(error) << "Tried to add route with invalid router "
                                << util::ip_to_string(route.router);
@@ -408,30 +471,86 @@ bool add_route(struct route &&route) {
         << "Tried to add route with invalid out device id " << route.dev_id;
     return false;
   }
-  routing_table.emplace(route);
+  route.changed = true;
+  routing_table.emplace_back(route);
+  routing_table.sort();
   return true;
 }
 
-bool lookup_route(const addr_t dst, const struct route **out_route) {
+bool lookup_route(const addr_t dst, struct route **out_route, int prefix) {
+  BOOST_LOG_TRIVIAL(trace) << "Looking up route " << util::ip_to_string(dst)
+                           << "/" << prefix;
   uint32_t addr = boost::endian::endian_reverse(*(uint32_t *)dst);
-  for (const auto &r : routing_table) {
+  for (auto &r : routing_table) {
+    BOOST_LOG_TRIVIAL(trace) << "Trying " << util::ip_to_string(r.dst);
     uint32_t route_dst = boost::endian::endian_reverse(*(uint32_t *)r.dst);
     if (!r.prefix || addr >> (32 - r.prefix) == route_dst >> (32 - r.prefix)) {
-      *out_route = &r;
-      return true;
+      if (prefix == -1 || r.prefix == prefix) {
+        *out_route = &r;
+        return true;
+      }
     }
   }
   return false;
 }
 
+bool delete_route(const struct route *route) {
+  auto it = routing_table.begin();
+  while (it != routing_table.end()) {
+    if (!memcmp(route->dst, it->dst, sizeof(ip::addr_t)) &&
+        route->prefix == it->prefix) {
+      BOOST_LOG_TRIVIAL(info) << "Route to " << util::ip_to_string(route->dst)
+                              << "/" << (int)route->prefix << " deleted.";
+      routing_table.erase(it++);
+      return true;
+    } else {
+      ++it;
+    }
+  }
+  return false;
+}
+
+void update_route() {
+  BOOST_LOG_TRIVIAL(trace) << "Aging routes";
+  for (auto ri = routing_table.begin(); ri != routing_table.end();) {
+    if (ri->age < 0) {
+      // manual route, don't age
+      ++ri;
+      continue;
+    }
+    ++ri->age;
+    if (ri->age == rip::max_age) {
+      // start deletion process
+      BOOST_LOG_TRIVIAL(trace) << "Route to " << util::ip_to_string(ri->dst)
+                               << " started deletion countdown";
+      ri->metric = rip::infinity;
+      ri->changed = true;
+      rip::trigger_update();
+    } else if (ri->age > rip::max_age + rip::deletion_timeout) {
+      // the deletion timer has also expired
+      BOOST_LOG_TRIVIAL(info) << "Route to " << util::ip_to_string(ri->dst)
+                              << " deleted due to timeout.";
+      routing_table.erase(ri++);
+      continue;
+    }
+    ++ri;
+  }
+  routing_table.sort();
+}
+
 void print_route() {
+  std::cout << "\nGlobal Routing Table\n====================\n";
   for (const auto &r : routing_table) {
     std::cout << util::ip_to_string(r.dst) << "/" << (int)r.prefix << " ";
     if (r.has_router) {
       std::cout << "via " << util::ip_to_string(r.router) << " ";
     }
-    std::cout << "dev " << device::get_device_handle(r.dev_id).name;
-    std::cout << " metric " << r.metric << std::endl;
+    std::cout << "dev " << device::get_device_handle(r.dev_id).name
+              << " metric " << r.metric;
+    if (r.age != -1) {
+      std::cout << " age " << r.age;
+    }
+    std::cout << std::endl;
   }
 }
 } // namespace ip
