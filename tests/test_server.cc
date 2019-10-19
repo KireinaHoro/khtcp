@@ -26,7 +26,7 @@
 #include <iostream>
 
 int main(int argc, char **argv) {
-  khtcp::util::init_logging(boost::log::trivial::warning);
+  khtcp::util::init_logging(boost::log::trivial::info);
 
   // add all devices
   khtcp::device::add_device(nullptr);

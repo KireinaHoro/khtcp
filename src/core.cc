@@ -420,7 +420,7 @@ void client_request_handler(const boost::system::error_code &ec,
                     boost::asio::placeholders::bytes_transferred, client_id));
   } else {
     if (ec == boost::asio::error::eof) {
-      BOOST_LOG_TRIVIAL(info) << "Client " << client_id << " disconnected.";
+      BOOST_LOG_TRIVIAL(debug) << "Client " << client_id << " disconnected.";
     } else {
       BOOST_LOG_TRIVIAL(warning) << "Client handler failed: " << ec.message();
     }
@@ -442,7 +442,7 @@ void new_client_handler(const boost::system::error_code &ec,
     id = rand();
   }
 
-  BOOST_LOG_TRIVIAL(info) << "Accpeted new client with id " << id;
+  BOOST_LOG_TRIVIAL(debug) << "Accpeted new client with id " << id;
   get().clients.emplace(std::piecewise_construct, std::forward_as_tuple(id),
                         std::forward_as_tuple(std::move(sock), nullptr));
 

@@ -110,8 +110,8 @@ int print_eth_frame_callback(const void *frame, int len, int dev_id) {
 std::vector<device::eth_holder> multicasts;
 
 void join_multicast(const addr_t multicast) {
-  BOOST_LOG_TRIVIAL(warning)
-      << "Joining Ethernet multicast group " << util::mac_to_string(multicast);
+  BOOST_LOG_TRIVIAL(info) << "Joining Ethernet multicast group "
+                          << util::mac_to_string(multicast);
   multicasts.emplace_back();
   memcpy(multicasts[multicasts.size() - 1].data, multicast, sizeof(addr_t));
 }

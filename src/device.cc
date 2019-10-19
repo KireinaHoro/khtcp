@@ -16,7 +16,7 @@ namespace device {
 
 int device_t::start_capture() {
   char error_buffer[PCAP_ERRBUF_SIZE];
-  BOOST_LOG_TRIVIAL(info) << "Opening capture on " << name;
+  BOOST_LOG_TRIVIAL(debug) << "Opening capture on " << name;
   pcap_handle = pcap_open_live(name.c_str(), CAPTURE_BUFSIZ, false,
                                PACKET_TIMEOUT, error_buffer);
   if (!pcap_handle) {
@@ -113,7 +113,7 @@ int add_device(const char *device) {
           memcpy(new_device->addr, s->sll_addr, sizeof(eth::addr_t));
           new_device->id = core::get().devices.size();
           core::get().devices.push_back(new_device);
-          BOOST_LOG_TRIVIAL(info)
+          BOOST_LOG_TRIVIAL(debug)
               << "Found requested device " << ifa->ifa_name << "("
               << util::mac_to_string(new_device->addr)
               << ") as id=" << new_device->id;
