@@ -101,11 +101,6 @@ void scan_arp_table() {
   }
   BOOST_LOG_TRIVIAL(trace) << "Purged " << counter
                            << " entries during ARP table cleanup";
-
-  // fire a new round
-  auto &timer = core::get().arp_table_timer;
-  timer.expires_from_now(boost::posix_time::seconds(1));
-  timer.async_wait([&](auto ec) { scan_arp_table(); });
 }
 
 void start(int dev_id) { async_read_arp(dev_id, default_handler); }

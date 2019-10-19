@@ -92,7 +92,7 @@ struct core {
       client_sockets;
   const static int MIN_FD = 400000; // to avoid clashing with normal file fds
 
-  boost::asio::deadline_timer arp_table_timer;
+  boost::asio::deadline_timer per_second_timer;
 
   std::unordered_map<void *, uint32_t> multicast_buffers;
 

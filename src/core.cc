@@ -21,7 +21,7 @@ using namespace std::string_literals;
 core::core()
     : acceptor(io_context, boost::asio::local::stream_protocol::endpoint(
                                "\0khtcp-server"s)),
-      arp_table_timer(io_context), read_handlers_strand(io_context),
+      per_second_timer(io_context), read_handlers_strand(io_context),
       write_tasks_strand(io_context) {
   std::signal(SIGTERM, signal_handler);
   std::signal(SIGINT, signal_handler);
@@ -499,6 +499,32 @@ void cleanup_client(int client_id) {
   }
 }
 
+void per_second_tasks(const boost::system::error_code &ec) {
+  static uint32_t counter = 0;
+  if (!ec) {
+    arp::scan_arp_table();
+    ip::update_route();
+    if (counter % 30 == 0) {
+      for (int i = 0; i < get().devices.size(); ++i) {
+        rip::send_fulltable(device::get_device_handle(i).ip_addrs[0], rip::port,
+                            rip::RIP_MULTICAST, rip::port);
+      }
+    }
+    if (counter % 30 == 2) {
+      // shift from the unsolicited response of RIP
+      ip::print_route();
+    }
+    ++counter;
+    // fire a new round
+    auto &timer = get().per_second_timer;
+    timer.expires_from_now(boost::posix_time::seconds(1));
+    timer.async_wait(per_second_tasks);
+  } else {
+    BOOST_LOG_TRIVIAL(error)
+        << "Per-second timer for periodic tasks failed with message: "
+        << ec.message();
+  }
+}
 
 void record_multicast_buffer(void *buf) {
   get().multicast_buffers[buf] = get().devices.size();
@@ -530,10 +556,10 @@ int core::run() {
   };
   boost::asio::post(get().write_tasks_strand, write_task_executor);
 
-  // start the ARP table keeper
-  auto &timer = get().arp_table_timer;
+  // start the tasks that are run per second
+  auto &timer = get().per_second_timer;
   timer.expires_from_now(boost::posix_time::seconds(1));
-  timer.async_wait([&](auto ec) { arp::scan_arp_table(); });
+  timer.async_wait(per_second_tasks);
 
   ip::start();
 
