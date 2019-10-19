@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+
+IF="$(ls /sys/class/net/ | sed -e '/lo/d')"
+SERVER="out/khtcp/build/tests/test_server"
+
+# turn off IPv4
+iptables -P INPUT DROP
+iptables -P OUTPUT DROP
+iptables -P FORWARD DROP
+
+# turn off IPv6
+ip6tables -P INPUT DROP
+ip6tables -P OUTPUT DROP
+ip6tables -P FORWARD DROP
+
+# turn off ARP on all interfaces
+for i in ${IF}; do
+    echo "Turing off ARP for interface $i"
+    ip l s "$i" arp off
+done
+
+# launch test server
+exec "${SERVER}"
