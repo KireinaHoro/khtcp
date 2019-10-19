@@ -248,7 +248,7 @@ void async_write_ip(const addr_t src, const addr_t dst, uint8_t proto,
                     uint64_t payload_len, write_handler_t &&handler,
                     int client_id, uint16_t identification, bool df,
                     const void *option) {
-  boost::asio::post(core::get().write_tasks_strand, [=]() {
+  boost::asio::post(core::get().write_tasks_strand, [=]() mutable {
     core::get().write_tasks.emplace_back(
         [=]() mutable {
           bool is_local = false;
