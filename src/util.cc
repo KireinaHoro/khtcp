@@ -1,6 +1,7 @@
 #include "util.h"
 
 #include <arpa/inet.h>
+#include <boost/endian/conversion.hpp>
 #include <boost/log/attributes/attribute_value.hpp>
 #include <boost/log/attributes/value_extraction.hpp>
 #include <boost/log/core.hpp>
@@ -77,14 +78,18 @@ int string_to_ip(const std::string &str, ip::addr_t addr) {
   return inet_aton(str.c_str(), (in_addr *)addr);
 }
 
-int mask_to_cidr(const struct sockaddr_in *addr) {
-  uint32_t n = addr->sin_addr.s_addr;
+int mask_to_cidr(uint32_t n) {
   unsigned int count = 0;
   while (n) {
     count += n & 1;
     n >>= 1;
   }
   return count;
+}
+
+uint32_t cidr_to_mask(int prefix) {
+  return boost::endian::endian_reverse(
+      prefix == 0 ? 0 : (0xffffffff << (32 - prefix)));
 }
 } // namespace util
 } // namespace khtcp

@@ -143,9 +143,9 @@ int add_device(const char *device) {
           // add route for subnet
           ip::route r;
           r.dev_id = dev_id;
-          r.metric = 10; // 10 for local
-          r.prefix =
-              util::mask_to_cidr((const struct sockaddr_in *)ifa->ifa_netmask);
+          r.prefix = util::mask_to_cidr(
+              ((const struct sockaddr_in *)ifa->ifa_netmask)->sin_addr.s_addr);
+          r.age = -1; // never expires
           memset(r.dst, 0, sizeof(ip::addr_t));
           memcpy(r.dst, &s->sin_addr.s_addr, r.prefix / 8);
 

@@ -45,7 +45,9 @@ std::string ip_to_string(const ip::addr_t addr);
 
 int string_to_ip(const std::string &str, ip::addr_t addr);
 
-int mask_to_cidr(const struct sockaddr_in *addr);
+int mask_to_cidr(uint32_t n);
+
+uint32_t cidr_to_mask(int prefix);
 
 } // namespace util
 } // namespace khtcp
