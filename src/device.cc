@@ -20,8 +20,6 @@ int device_t::start_capture() {
   pcap_handle = pcap_open_live(name.c_str(), CAPTURE_BUFSIZ, false,
                                PACKET_TIMEOUT, error_buffer);
   if (!pcap_handle) {
-    delete trigger;
-    trigger = nullptr;
     BOOST_LOG_TRIVIAL(error) << "Failed to open device: " << error_buffer;
     return -1;
   }
@@ -41,7 +39,7 @@ int device_t::start_capture() {
   return 0;
 }
 
-device_t::device_t() : inject_strand(core::get().io_context) {}
+device_t::device_t() : inject_strand(core::get().io_context), trigger(nullptr) {}
 
 device_t::~device_t() {
   for (auto &ip : ip_addrs) {
@@ -59,6 +57,11 @@ device_t::~device_t() {
 void device_t::handle_sniff() {
   pcap_pkthdr hdr;
   auto pkt = pcap_next(pcap_handle, &hdr);
+  if (!pkt) {
+    BOOST_LOG_TRIVIAL(error) << "Failed to read packet from pcap";
+    core::get().io_context.stop();
+    return;
+  }
   BOOST_LOG_TRIVIAL(trace) << "Captured frame of length " << hdr.len
                            << " from device " << name << ", caplen "
                            << hdr.caplen;
@@ -68,6 +71,7 @@ void device_t::handle_sniff() {
   if (callback) {
     if ((*callback)(pkt, hdr.len, id)) {
       BOOST_LOG_TRIVIAL(error) << "Frame receive callback failed";
+      core::get().io_context.stop();
       return;
     }
 
@@ -161,7 +165,11 @@ int add_device(const char *device) {
     }
   }
   if (ret == -1) {
-    BOOST_LOG_TRIVIAL(error) << "Device " << device << " not found";
+    if (device) {
+      BOOST_LOG_TRIVIAL(error) << "Device " << device << " not found";
+    } else {
+      BOOST_LOG_TRIVIAL(error) << "Requested to add all devices, but none succeeded; check permissions?";
+    }
   }
   freeifaddrs(ifaddr);
   return ret;
