@@ -35,7 +35,10 @@ void async_write_udp(const ip::addr_t src, uint16_t src_port,
     core::get().write_tasks.emplace_back(
         [=]() {
           BOOST_LOG_TRIVIAL(trace)
-              << "Sending UDP packet with payload length " << payload_len;
+              << "Sending UDP packet with payload length " << payload_len << " "
+              << (src ? util::ip_to_string(src) : "(multicast)") << ":"
+              << src_port << " > " << util::ip_to_string(dst) << ":"
+              << dst_port;
           auto packet_len = sizeof(udp_header_t) + payload_len;
           auto packet_ptr = new uint8_t[packet_len];
 

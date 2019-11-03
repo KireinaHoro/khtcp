@@ -373,6 +373,8 @@ void client_request_handler(const boost::system::error_code &ec,
            client_id](const void *payload_ptr, uint64_t payload_len,
                       const khtcp::ip::addr_t src, uint16_t src_port,
                       const khtcp::ip::addr_t dst, uint16_t dst_port) -> bool {
+            BOOST_LOG_TRIVIAL(trace) << "Got UDP packet from port " << src_port
+                                     << " to port " << dst_port;
             if (it->second.bind_addr.sin_family == AF_INET &&
                 (memcmp(&it->second.bind_addr.sin_addr, src,
                         sizeof(ip::addr_t)) ||

@@ -39,7 +39,8 @@ int device_t::start_capture() {
   return 0;
 }
 
-device_t::device_t() : inject_strand(core::get().io_context), trigger(nullptr) {}
+device_t::device_t()
+    : inject_strand(core::get().io_context), trigger(nullptr) {}
 
 device_t::~device_t() {
   for (auto &ip : ip_addrs) {
@@ -168,7 +169,8 @@ int add_device(const char *device) {
     if (device) {
       BOOST_LOG_TRIVIAL(error) << "Device " << device << " not found";
     } else {
-      BOOST_LOG_TRIVIAL(error) << "Requested to add all devices, but none succeeded; check permissions?";
+      BOOST_LOG_TRIVIAL(error) << "Requested to add all devices, but none "
+                                  "succeeded; check permissions?";
     }
   }
   freeifaddrs(ifaddr);
