@@ -24,7 +24,7 @@ void socket::get_src(const ip::addr_t dst, const uint8_t **src_out,
   if (bind_addr.sin_family == AF_INET) {
     // we're bound
     *src_out = (const uint8_t *)&bind_addr.sin_addr;
-    *port_out = bind_addr.sin_port;
+    *port_out = ntohs(bind_addr.sin_port);
   } else {
     struct ip::route *route;
     if (!ip::lookup_route(dst, &route)) {

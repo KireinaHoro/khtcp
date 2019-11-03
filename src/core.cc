@@ -295,7 +295,7 @@ void client_request_handler(const boost::system::error_code &ec,
                 << "Client " << client_id
                 << " tried to bind to address already in use ("
                 << util::ip_to_string((const uint8_t *)&req->bind.addr.sin_addr)
-                << ":" << req->bind.addr.sin_port << ") for socket fd "
+                << ":" << ntohs(req->bind.addr.sin_port) << ") for socket fd "
                 << req->bind.fd;
             ok = false;
             resp->bind.ret = EADDRINUSE;
@@ -310,7 +310,7 @@ void client_request_handler(const boost::system::error_code &ec,
         BOOST_LOG_TRIVIAL(trace)
             << "Client " << client_id << " binded "
             << util::ip_to_string((const uint8_t *)&req->bind.addr.sin_addr)
-            << ":" << req->bind.addr.sin_port << " to socket fd "
+            << ":" << ntohs(req->bind.addr.sin_port) << " to socket fd "
             << req->bind.fd;
       }
       boost::asio::write(sock, buf);
@@ -339,7 +339,7 @@ void client_request_handler(const boost::system::error_code &ec,
                          &port);
       udp::async_write_udp(
           src, port, (const uint8_t *)&req->sendto.dst.sin_addr,
-          req->sendto.dst.sin_port, payload_ptr, req->payload_len,
+          ntohs(req->sendto.dst.sin_port), payload_ptr, req->payload_len,
           [buf, resp, req, payload_ptr, &sock](int ret) {
             resp->sendto.ret = req->payload_len;
             try {
@@ -376,14 +376,14 @@ void client_request_handler(const boost::system::error_code &ec,
             if (it->second.bind_addr.sin_family == AF_INET &&
                 (memcmp(&it->second.bind_addr.sin_addr, src,
                         sizeof(ip::addr_t)) ||
-                 src_port != it->second.bind_addr.sin_port)) {
+                 src_port != ntohs(it->second.bind_addr.sin_port))) {
               return false;
             }
             resp->payload_len = payload_len;
             resp->recvfrom.ret = payload_len;
             resp->recvfrom.src.sin_family = AF_INET;
             memcpy(&resp->recvfrom.src.sin_addr, src, sizeof(ip::addr_t));
-            resp->recvfrom.src.sin_port = src_port;
+            resp->recvfrom.src.sin_port = htons(src_port);
 
             try {
               boost::asio::write(sock, buf);
