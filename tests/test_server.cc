@@ -29,7 +29,10 @@ int main(int argc, char **argv) {
   khtcp::util::init_logging(boost::log::trivial::info);
 
   // add all devices
-  khtcp::device::add_device(nullptr);
+  if (khtcp::device::add_device(nullptr) < 0) {
+    std::cerr << "Failed to add all devices" << std::endl;
+    return -1;
+  }
 
   khtcp::eth::set_frame_receive_callback(khtcp::eth::ethertype_broker_callback);
   if (argc > 2) {
