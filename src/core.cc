@@ -495,6 +495,8 @@ void cleanup_client(int client_id) {
   while (sit != get().client_sockets.end()) {
     if (sit->first.first == client_id) {
       get().client_sockets.erase(sit++);
+    } else {
+      ++sit;
     }
   }
 }
