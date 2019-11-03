@@ -161,9 +161,20 @@ void async_resolve_mac(int dev_id, const ip::addr_t dst,
   static std::function<void(int, int, resolve_mac_handler_t,
                             boost::asio::deadline_timer *, const uint8_t *)>
       check_mac = [](int n, int dev_id, auto handler, auto t, auto dst) {
+        auto &device = device::get_device_handle(dev_id);
+        for (const auto &ip : device.ip_addrs) {
+          if (!memcmp(ip, dst, sizeof(ip::addr_t))) {
+            // ip is on this device, send with device MAC address
+            BOOST_LOG_TRIVIAL(trace)
+                << "Destination IP " << util::ip_to_string(dst)
+                << " is on device " << device.name;
+            handler(0, device.addr);
+            delete t;
+            return;
+          }
+        }
         if (neighbor_map.find(*(uint32_t *)dst) == neighbor_map.end()) {
           // send ARP query.
-          auto &device = device::get_device_handle(dev_id);
           BOOST_LOG_TRIVIAL(trace)
               << "Sending ARP query for " << util::ip_to_string(dst);
           async_write_arp(
