@@ -331,6 +331,8 @@ void trigger_update() {
         auto &route = *updated_routes.front();
         rte_ptr[i].afi = boost::endian::endian_reverse((uint16_t)AF_INET);
         memcpy(rte_ptr[i].address, route.dst, sizeof(ip::addr_t));
+        uint32_t mask = util::cidr_to_mask(route.prefix);
+        memcpy(rte_ptr[i].mask, &mask, sizeof(ip::addr_t));
         rte_ptr[i].metric = boost::endian::endian_reverse(route.metric);
         BOOST_LOG_TRIVIAL(trace)
             << "Adding route to " << util::ip_to_string(route.dst) << "/"
