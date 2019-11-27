@@ -376,9 +376,15 @@ void client_request_handler(const boost::system::error_code &ec,
             BOOST_LOG_TRIVIAL(trace) << "Got UDP packet from port " << src_port
                                      << " to port " << dst_port;
             if (it->second.bind_addr.sin_family == AF_INET &&
-                (memcmp(&it->second.bind_addr.sin_addr, src,
+                (memcmp(&it->second.bind_addr.sin_addr, dst,
                         sizeof(ip::addr_t)) ||
-                 src_port != ntohs(it->second.bind_addr.sin_port))) {
+                 dst_port != ntohs(it->second.bind_addr.sin_port))) {
+              BOOST_LOG_TRIVIAL(trace)
+                  << "Bound socket mismatch with destination: expected "
+                  << util::ip_to_string(
+                         (uint8_t *)&it->second.bind_addr.sin_addr)
+                  << ":" << ntohs(it->second.bind_addr.sin_port) << ", got "
+                  << util::ip_to_string(dst) << ":" << dst_port;
               return false;
             }
             resp->payload_len = payload_len;
