@@ -38,8 +38,13 @@ enum request_type {
   SOCKET,
   CLOSE,
   BIND,
+  LISTEN,
+  CONNECT,
+  ACCEPT,
   SENDTO,
   RECVFROM,
+  SEND,
+  RECV,
 };
 
 struct request {
@@ -101,11 +106,28 @@ struct request {
     } bind;
     struct {
       int fd;
+      int backlog;
+    } listen;
+    struct {
+      int fd;
+      struct sockaddr_in addr;
+    } connect;
+    struct {
+      int fd;
+    } accept;
+    struct {
+      int fd;
       struct sockaddr_in dst;
     } sendto;
     struct {
       int fd;
     } recvfrom;
+    struct {
+      int fd;
+    } send;
+    struct {
+      int fd;
+    } recv;
   };
 };
 
@@ -163,12 +185,28 @@ struct response {
       int ret;
     } bind;
     struct {
+      int ret;
+    } listen;
+    struct {
+      int ret;
+    } connect;
+    struct {
+      int ret;
+      struct sockaddr_in peer;
+    } accept;
+    struct {
       ssize_t ret;
     } sendto;
     struct {
       ssize_t ret;
       struct sockaddr_in src;
     } recvfrom;
+    struct {
+      ssize_t ret;
+    } send;
+    struct {
+      ssize_t ret;
+    } recv;
   };
 };
 
