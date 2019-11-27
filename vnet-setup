@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 IF="$(ls /sys/class/net/ | sed -e '/lo/d')"
-SERVER="out/khtcp/build/tests/test_server"
+SERVER="out/khtcp/tests/test_server"
 
 # turn off IPv4
 iptables -P INPUT DROP
