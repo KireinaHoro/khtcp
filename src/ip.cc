@@ -153,8 +153,10 @@ device::read_handler_t::first_type wrap_read_handler(int16_t proto,
                        hdr_ptr->dst_addr, hdr_ptr->dscp, option_ptr);
       } else if (self_sent) {
         // ignore packets sent by self, keeping the handler intact
+        BOOST_LOG_TRIVIAL(trace) << "Ignoring packet sent by self";
         return false;
-      } else {
+      } else if (proto < 0) {
+        // forwarding handler
         if (hdr_ptr->ttl == 0) {
           // TODO: send ICMP Time Exceeded Message back to src
         } else {
@@ -163,10 +165,14 @@ device::read_handler_t::first_type wrap_read_handler(int16_t proto,
                          hdr_ptr->dscp, hdr_ptr->ttl - 1, payload_ptr,
                          payload_len, [hdr_ptr](auto ret) {
                            if (!ret) {
-                             BOOST_LOG_TRIVIAL(trace) << "IP packet forwarded.";
+                             BOOST_LOG_TRIVIAL(trace)
+                                 << "IP packet forwarded "
+                                 << util::ip_to_string(hdr_ptr->src_addr)
+                                 << " > "
+                                 << util::ip_to_string(hdr_ptr->dst_addr);
                            } else if (ret == ECANCELED) {
                              // non-local broadcast
-                             BOOST_LOG_TRIVIAL(debug)
+                             BOOST_LOG_TRIVIAL(trace)
                                  << "Not forwarding non-local broadcast.";
                            } else {
                              BOOST_LOG_TRIVIAL(error)
@@ -178,26 +184,30 @@ device::read_handler_t::first_type wrap_read_handler(int16_t proto,
                            }
                          });
         }
+        // call the handler: default handler has logging purposes
+        return handler(payload_ptr, payload_len, hdr_ptr->src_addr,
+                       hdr_ptr->dst_addr, hdr_ptr->dscp, option_ptr);
+      } else {
+        // not forwarding handler & not ucast/mcast/self-sent: ignore
         return false;
       }
     } else {
+      BOOST_LOG_TRIVIAL(trace)
+          << "Ignoring packet with mismatch proto: expected " << proto
+          << ", got " << (int)hdr_ptr->proto;
       return false;
     }
   };
 }
 
-// Used to print debug information for all packets.
+// Used to print debug information for all packets and forward all IP packets.
 bool default_handler(const void *payload_ptr, uint64_t payload_len,
                      const addr_t src, const addr_t dst, uint8_t dscp,
                      const void *opt) {
-  auto ret = false;
   BOOST_LOG_TRIVIAL(trace) << "IP packet from " << util::ip_to_string(src)
                            << " to " << util::ip_to_string(dst)
                            << " with payload length " << payload_len;
-  if (ret) {
-    async_read_ip(-1, default_handler);
-  }
-  return ret;
+  return false;
 }
 
 void start() { async_read_ip(-1, default_handler); }

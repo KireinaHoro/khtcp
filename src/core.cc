@@ -571,7 +571,7 @@ int core::run() {
   timer.expires_from_now(boost::posix_time::seconds(1));
   timer.async_wait(per_second_tasks);
 
-  // ip::start();
+  ip::start();
   rip::start();
 
   // Join RIPv2 multicast group
