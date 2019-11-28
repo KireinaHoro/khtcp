@@ -185,6 +185,15 @@ void join_multicast(const addr_t multicast);
 void test_multicast_broadcast(const ip::addr_t dst, route **r,
                               bool *is_multicast, bool *is_broadcast);
 
+/**
+ * @brief IP checksum.
+ *
+ * @param vdata data to be verified.
+ * @param length length of the data.
+ * @return uint16_t
+ */
+uint16_t ip_checksum(const void *vdata, size_t length);
+
 } // namespace ip
 } // namespace khtcp
 
