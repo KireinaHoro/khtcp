@@ -21,6 +21,7 @@
 
 #include "core.h"
 #include "device.h"
+#include "tcp.h"
 #include "util.h"
 
 #include <iostream>
@@ -51,6 +52,24 @@ int main(int argc, char **argv) {
       return -1;
     }
   }
+
+  // test TCP segment send
+  khtcp::ip::addr_t baidu;
+  khtcp::util::string_to_ip("39.156.69.79", baidu);
+  boost::asio::deadline_timer t(khtcp::core::get().io_context);
+  t.expires_from_now(boost::posix_time::seconds(2));
+  t.async_wait([&](auto ec) {
+    if (!ec) {
+      khtcp::tcp::async_send_segment(
+          khtcp::core::get().devices[0]->ip_addrs[0], 54321, baidu, 80,
+          1145141919, 0, false, false, false, true, false, 0, nullptr, 0,
+          [](int ret) {
+            if (!ret) {
+              std::cout << "Sent SYN successfully" << std::endl;
+            }
+          });
+    }
+  });
 
   return khtcp::core::get().run();
 }
