@@ -49,6 +49,8 @@ int mask_to_cidr(uint32_t n);
 
 uint32_t cidr_to_mask(int prefix);
 
+void hexdump(const char *note, const void *data, size_t size);
+
 } // namespace util
 } // namespace khtcp
 #endif
