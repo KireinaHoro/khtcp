@@ -91,9 +91,10 @@ struct tcb {
   uint32_t recv_window;
 };
 
-using open_handler_t = std::function<void(std::unique_ptr<struct tcb>)>;
+using open_handler_t = std::function<void(int, struct conn_key)>;
 void async_open(const ip::addr_t src, uint16_t src_port, const ip::addr_t dst,
-                uint16_t dst_port, bool active, open_handler_t &&handler);
+                uint16_t dst_port, bool active, open_handler_t &&handler,
+                int client_id = 0);
 
 } // namespace tcp
 } // namespace khtcp

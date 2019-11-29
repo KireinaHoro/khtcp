@@ -60,14 +60,17 @@ int main(int argc, char **argv) {
   t.expires_from_now(boost::posix_time::seconds(2));
   t.async_wait([&](auto ec) {
     if (!ec) {
-      khtcp::tcp::async_send_segment(
-          khtcp::core::get().devices[0]->ip_addrs[0], 54321, baidu, 80,
-          1145141919, 0, false, false, false, true, false, 0, nullptr, 0,
-          [](int ret) {
-            if (!ret) {
-              std::cout << "Sent SYN successfully" << std::endl;
-            }
-          });
+      khtcp::tcp::async_open(khtcp::core::get().devices[0]->ip_addrs[0], 54321,
+                             baidu, 80, true, [](int ret, auto key) {
+                               if (!ret) {
+                                 std::cout << "Successfully opened connection"
+                                           << std::endl;
+                               } else {
+                                 std::cerr
+                                     << "Failed to open connection: errno "
+                                     << ret << std::endl;
+                               }
+                             });
     }
   });
 
