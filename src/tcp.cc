@@ -6,6 +6,59 @@
 
 namespace khtcp {
 namespace tcp {
+void async_recv_segment(const ip::addr_t src, uint16_t src_port,
+                        const ip::addr_t dst, uint16_t dst_port,
+                        recv_segment_handler_t &&handler, int client_id) {
+  // We cannot use the normal ip::async_read_ip as we need a timeout to revoke
+  // request handlers
+  boost::asio::post(core::get().read_handlers_strand, [=]() {
+    auto t =
+        std::make_shared<boost::asio::deadline_timer>(core::get().io_context);
+    t->expires_from_now(timeout);
+    core::get().read_handlers.emplace_back(
+        ip::wrap_read_handler(
+            proto,
+            [=](const void *payload_ptr, uint64_t payload_len,
+                const ip::addr_t s, const ip::addr_t d, uint8_t dscp,
+                const void *opt) -> bool {
+              if (memcmp(src, s, sizeof(ip::addr_t)) ||
+                  memcmp(dst, d, sizeof(ip::addr_t))) {
+                // IP mismatch
+                t->cancel();
+                return false;
+              }
+              auto hdr = (struct tcp_header_t *)payload_ptr;
+              auto hdr_len = (hdr->data_offset >> 4) << 2;
+              auto segment_data = (uint8_t *)hdr + hdr_len;
+              auto segment_len = payload_len - hdr_len;
+              if (src_port != boost::endian::endian_reverse(hdr->src_port) ||
+                  dst_port != boost::endian::endian_reverse(hdr->dst_port)) {
+                // port mismatch
+                t->cancel();
+                return false;
+              }
+              handler(0, boost::endian::endian_reverse(hdr->seq),
+                      boost::endian::endian_reverse(hdr->ack), ACK(hdr->flags),
+                      PSH(hdr->flags), RST(hdr->flags), SYN(hdr->flags),
+                      FIN(hdr->flags),
+                      boost::endian::endian_reverse(hdr->window), segment_data,
+                      segment_len);
+              t->cancel();
+              return true;
+            }),
+        client_id);
+    auto last = core::get().read_handlers.end();
+    --last;
+    t->async_wait([=](auto ec) {
+      if (!ec) {
+        BOOST_LOG_TRIVIAL(warning)
+            << "TCP read operation time out, cancelling read handler...";
+        core::get().read_handlers.erase(last);
+        handler(ETIMEDOUT, 0, 0, 0, 0, 0, 0, 0, 0, nullptr, 0);
+      }
+    });
+  });
+}
 void async_send_segment(const ip::addr_t src, uint16_t src_port,
                         const ip::addr_t dst, uint16_t dst_port,
                         uint32_t seq_num, uint32_t ack_num, bool ack, bool psh,
