@@ -151,17 +151,13 @@ void async_send_segment(const ip::addr_t src, uint16_t src_port,
                         uint32_t seq_num, uint32_t ack_num, bool ack, bool psh,
                         bool rst, bool syn, bool fin, uint16_t window,
                         const void *segment_ptr, uint16_t segment_len,
-                        send_segment_handler_t &&handler) {
-  boost::asio::post(core::get().write_tasks_strand, [=]() {
-    core::get().write_tasks.emplace_back(
-        [=]() {
+                        send_segment_handler_t &&handler, int client_id) {
           BOOST_LOG_TRIVIAL(warning)
-              << "Sending TCP segment with segment length " << segment_len
-              << " " << util::ip_to_string(src) << ":" << src_port << " > "
-              << util::ip_to_string(dst) << ":" << dst_port
-              << ", SEQ=" << seq_num << " ACK=" << ack_num << " ["
-              << (ack ? 'A' : '.') << (psh ? 'P' : '.') << (rst ? 'R' : '.')
-              << (syn ? 'S' : '.') << (fin ? 'F' : '.') << "]";
+      << "Sending TCP segment with segment length " << segment_len << " "
+      << util::ip_to_string(src) << ":" << src_port << " > "
+      << util::ip_to_string(dst) << ":" << dst_port << ", SEQ=" << seq_num
+      << " ACK=" << ack_num << " [" << (ack ? 'A' : '.') << (psh ? 'P' : '.')
+      << (rst ? 'R' : '.') << (syn ? 'S' : '.') << (fin ? 'F' : '.') << "]";
 
           uint16_t packet_len = sizeof(tcp_header_t) + segment_len;
           auto packet_len_bigendian = boost::endian::endian_reverse(packet_len);
@@ -191,20 +187,22 @@ void async_send_segment(const ip::addr_t src, uint16_t src_port,
           pseudo_header += sizeof(uint8_t);
           memcpy(pseudo_header, &proto, sizeof(proto));
           pseudo_header += sizeof(proto);
-          memcpy(pseudo_header, &packet_len_bigendian,
-                 sizeof(packet_len_bigendian));
+  memcpy(pseudo_header, &packet_len_bigendian, sizeof(packet_len_bigendian));
 
           hdr->checksum = ip::ip_checksum(phdr, packet_csum_len);
 
           ip::async_write_ip(
-              src, dst, proto, 0, default_ttl, hdr, packet_len, [=](int ret) {
+      src, dst, proto, 0, default_ttl, hdr, packet_len,
+      [=](int ret) {
                 if (ret) {
                   BOOST_LOG_TRIVIAL(error)
-                      << "Failed to write TCP packet: Errno " << ret;
+              << "Failed to write TCP segment: Errno " << ret;
                 }
                 handler(ret);
                 delete[] phdr;
-              });
+      },
+      client_id);
+}
         },
         0);
   });
