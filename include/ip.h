@@ -12,6 +12,8 @@
 #ifndef __KHTCP_IP_H_
 #define __KHTCP_IP_H_
 
+#include "device.h"
+
 #include <cstdint>
 #include <functional>
 #include <list>
@@ -61,6 +63,9 @@ using read_handler_t = std::function<bool(const void *, uint64_t, const addr_t,
  * (ret)
  */
 using write_handler_t = std::function<void(int)>;
+
+device::read_handler_t::first_type wrap_read_handler(int16_t proto,
+                                                     read_handler_t handler);
 
 // The header shall be of just 5*4=20 octets
 static_assert(sizeof(ip_header_t) == 5 * 4, "IP header size mismatch");
