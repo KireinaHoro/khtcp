@@ -59,6 +59,63 @@ void async_recv_segment(const ip::addr_t src, uint16_t src_port,
     });
   });
 }
+
+bool default_handler(const void *payload_ptr, uint64_t payload_len,
+                     const ip::addr_t src, const ip::addr_t dst, uint8_t dscp,
+                     const void *opt) {
+  auto hdr = (struct tcp_header_t *)payload_ptr;
+  struct conn_key k;
+  // reverse src/dst
+  memcpy(k.src, dst, sizeof(ip::addr_t));
+  memcpy(k.dst, src, sizeof(ip::addr_t));
+  k.src_port = boost::endian::endian_reverse(hdr->dst_port);
+  k.dst_port = boost::endian::endian_reverse(hdr->src_port);
+  auto it = conns.find(k);
+  if (it == conns.end() || !it->second.up) {
+    // completely no record or not up (opening)
+    if (!SYN(hdr->flags) || ((it == conns.end() && ACK(hdr->flags)) ||
+                             RST(hdr->flags) || FIN(hdr->flags))) {
+      // untracked/malformed connection: RST
+      auto seq = boost::endian::endian_reverse(hdr->seq);
+      BOOST_LOG_TRIVIAL(warning) << "Sending RST for unknown connection";
+      async_send_segment(
+          dst, k.src_port, src, k.dst_port, 0, seq + 1, false, false, true,
+          false, false, 0, nullptr, 0, [=](int ret) {
+            if (!ret) {
+              BOOST_LOG_TRIVIAL(info)
+                  << "Sent RST to unknown connection " << k.to_string();
+            } else {
+              BOOST_LOG_TRIVIAL(error) << "Failed to send RST: Errno " << ret;
+            }
+          });
+    } else if (it == conns.end()) {
+      // plain SYN: check if listening
+      memset(k.dst, 0, sizeof(ip::addr_t));
+      k.dst_port = 0;
+      if (listening.find(k) == listening.end()) {
+        // closed port: ACK+RST
+        auto seq = boost::endian::endian_reverse(hdr->seq);
+        BOOST_LOG_TRIVIAL(warning) << "Sending RSTACK for closed port";
+        async_send_segment(
+            dst, k.src_port, src, boost::endian::endian_reverse(hdr->src_port),
+            0, seq + 1, true, false, true, false, false, 0, nullptr, 0,
+            [=](int ret) {
+              if (!ret) {
+                BOOST_LOG_TRIVIAL(info)
+                    << "Sent RST due to closed port " << k.src_port;
+              } else {
+                BOOST_LOG_TRIVIAL(error) << "Failed to send RST: Errno " << ret;
+              }
+            });
+      }
+    }
+    // we have the connection in record; do nothing
+  }
+  return false;
+}
+
+void start() { ip::async_read_ip(proto, default_handler); }
+
 void async_send_segment(const ip::addr_t src, uint16_t src_port,
                         const ip::addr_t dst, uint16_t dst_port,
                         uint32_t seq_num, uint32_t ack_num, bool ack, bool psh,

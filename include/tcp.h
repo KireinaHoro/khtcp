@@ -23,6 +23,8 @@ namespace tcp {
 static const uint8_t default_ttl = 64;
 static const uint8_t proto = 6;
 
+void start();
+
 /**
  * @brief The TCP header, without the TCP options.
  */

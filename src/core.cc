@@ -7,6 +7,7 @@
 #include "core.h"
 #include "packetio.h"
 #include "rip.h"
+#include "tcp.h"
 #include "udp.h"
 #include "util.h"
 
@@ -573,6 +574,7 @@ int core::run() {
 
   ip::start();
   rip::start();
+  tcp::start();
 
   // Join RIPv2 multicast group
   ip::join_multicast(rip::RIP_MULTICAST);
