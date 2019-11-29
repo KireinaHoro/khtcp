@@ -20,6 +20,9 @@
 namespace khtcp {
 namespace tcp {
 
+static const auto timeout = boost::posix_time::seconds(60);
+// without window scaling this would be 32KB
+static const auto local_window = 32768;
 static const uint8_t default_ttl = 64;
 static const uint8_t proto = 6;
 
@@ -62,9 +65,19 @@ void async_recv_segment(const ip::addr_t src, uint16_t src_port,
                         const ip::addr_t dst, uint16_t dst_port,
                         recv_segment_handler_t &&handler, int client_id = 0);
 
+struct conn_key {
+  ip::addr_t src;
+  uint16_t src_port;
+  ip::addr_t dst;
+  uint16_t dst_port;
+
+  bool operator==(const conn_key &a) const;
+  std::string to_string() const;
+};
+
 struct tcb {
-  // is connection established? (for passive open)
-  bool established;
+  // if the connection is UP
+  bool up;
   // SEGMENTED buffer pending send
   std::queue<boost::asio::const_buffer> pending_send;
   // receive buffer

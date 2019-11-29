@@ -3,9 +3,39 @@
 #include "util.h"
 
 #include <boost/endian/conversion.hpp>
+#include <random>
+#include <unordered_map>
+#include <unordered_set>
 
 namespace khtcp {
 namespace tcp {
+
+std::mt19937 eng;
+std::uniform_int_distribution<uint32_t> distribution;
+
+struct hash_fn {
+  std::size_t operator()(const conn_key &k) const {
+    return std::hash<uint32_t>()(*(uint32_t *)(k.src)) ^
+           std::hash<uint32_t>()(*(uint32_t *)(k.dst)) ^
+           std::hash<uint16_t>()(k.src_port) ^
+           std::hash<uint16_t>()(k.dst_port);
+  }
+};
+
+std::unordered_map<conn_key, tcb, hash_fn> conns;
+std::unordered_set<conn_key, hash_fn> listening;
+
+bool conn_key::operator==(const conn_key &a) const {
+  return src_port == a.src_port && dst_port == a.dst_port &&
+         !memcmp(src, a.src, sizeof(ip::addr_t)) &&
+         !memcmp(dst, a.dst, sizeof(ip::addr_t));
+}
+
+std::string conn_key::to_string() const {
+  return "(" + util::ip_to_string(src) + ":" + std::to_string(src_port) + "|" +
+         util::ip_to_string(dst) + ":" + std::to_string(dst_port) + ")";
+}
+
 void async_recv_segment(const ip::addr_t src, uint16_t src_port,
                         const ip::addr_t dst, uint16_t dst_port,
                         recv_segment_handler_t &&handler, int client_id) {
